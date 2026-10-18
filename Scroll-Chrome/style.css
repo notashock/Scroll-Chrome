@@ -1,0 +1,112 @@
+﻿/*
+ * YouTube Split Scroll â€“ Core Styles
+ * ===================================
+ *
+ * All YouTube-specific selectors are gathered here for easy updating
+ * when YouTube changes its DOM structure.
+ *
+ * â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+ * â”‚  SELECTOR REFERENCE (update these if YouTube changes its DOM)  â”‚
+ * â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+ * â”‚  Masthead (header) â”‚  ytd-masthead, #masthead-container         â”‚
+ * â”‚  Watch layout      â”‚  ytd-watch-flexy                           â”‚
+ * â”‚  Columns wrapper   â”‚  ytd-watch-flexy #columns                  â”‚
+ * â”‚  Left column       â”‚  ytd-watch-flexy #primary                  â”‚
+ * â”‚  Right column      â”‚  ytd-watch-flexy #secondary                â”‚
+ * â”‚  Theater attr      â”‚  ytd-watch-flexy[theater]                  â”‚
+ * â”‚  Fullscreen attr   â”‚  ytd-watch-flexy[fullscreen]               â”‚
+ * â”‚  Masthead height   â”‚  var(--ytd-masthead-height, 56px)          â”‚
+ * â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+ *
+ * The rules are scoped under html.yt-split-scroll so the toolbar
+ * toggle can enable/disable them by adding or removing that class.
+ */
+
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/*  Phase 1: Independent column scrolling                         */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+/*
+ * Only activate on viewports wide enough for the two-column layout.
+ * YouTube switches to single-column below â‰ˆ 1016 px.
+ */
+@media (min-width: 1016px) {
+
+  /*
+   * Target #primary and #secondary ONLY when:
+   *  - The extension is enabled (html.yt-split-scroll)
+   *  - We are on a normal watch page (ytd-watch-flexy)
+   *  - NOT in theater mode  ([theater])
+   *  - NOT in fullscreen     ([fullscreen])
+   */
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #columns {
+    /* Ensure columns wrapper doesn't restrict overflow */
+    overflow: visible;
+    /* Force align-items so sticky works correctly */
+    align-items: flex-start;
+  }
+
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #primary,
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary {
+    /*
+     * Make each column an independent scroll container.
+     *
+     * top: uses YouTube's own --ytd-masthead-height variable so the
+     * offset stays correct even if a promotional banner shifts it.
+     * Falls back to 56px (the standard masthead height).
+     */
+    position: sticky;
+    top: var(--ytd-masthead-height, 56px);
+    height: calc(100vh - var(--ytd-masthead-height, 56px));
+    overflow-y: auto;
+    align-self: flex-start;
+
+    /* Prevent horizontal scrollbar artifacts */
+    overflow-x: hidden;
+  }
+
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /*  Subtle scrollbars (Firefox-native scrollbar-* properties)  */
+  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+  /* Chrome/WebKit scrollbar styling */
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #primary::-webkit-scrollbar,
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #primary::-webkit-scrollbar-track,
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #primary::-webkit-scrollbar-thumb,
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary::-webkit-scrollbar-thumb {
+    background: rgba(128, 128, 128, 0.4);
+    border-radius: 3px;
+  }
+
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #primary::-webkit-scrollbar-thumb:hover,
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary::-webkit-scrollbar-thumb:hover {
+    background: rgba(128, 128, 128, 0.7);
+  }
+}
+
+
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/*  Phase 2 (optional): Sticky video player while scrolling       */
+/*  comments in the left column.                                  */
+/*  Activated by the class html.yt-split-scroll-sticky-player     */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+@media (min-width: 1016px) {
+
+  html.yt-split-scroll.yt-split-scroll-sticky-player
+    ytd-watch-flexy:not([theater]):not([fullscreen]) #player-container-outer {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--yt-spec-base-background, #0f0f0f);
+  }
+}
+
