@@ -5,27 +5,71 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h1>Split Scroll</h1>
+  <div class="header">
+    <div class="logo">
+      <span class="dot"></span>
+      <span class="title">Split Scroll</span>
+    </div>
+    <span class="version">v0.3.3</span>
+  </div>
 
-  <label class="toggle-row">
-    <span class="label-text">Split scrolling</span>
-    <input type="checkbox" id="enabled" checked>
-    <span class="slider"></span>
-  </label>
+  <div class="list">
+    <label class="row">
+      <span class="label">Split scrolling</span>
+      <input type="checkbox" id="enabled" checked>
+      <span class="switch"></span>
+    </label>
 
-  <label class="toggle-row">
-    <span class="label-text">Sticky player</span>
-    <input type="checkbox" id="stickyPlayer">
-    <span class="slider"></span>
-  </label>
+    <label class="row">
+      <span class="label">Sticky player</span>
+      <input type="checkbox" id="stickyPlayer">
+      <span class="switch"></span>
+    </label>
 
-  <label class="toggle-row">
-    <span class="label-text">Hide scrollbars</span>
-    <input type="checkbox" id="hideScrollbars" checked>
-    <span class="slider"></span>
-  </label>
+    <label class="row">
+      <span class="label">Hide scrollbars</span>
+      <input type="checkbox" id="hideScrollbars" checked>
+      <span class="switch"></span>
+    </label>
 
-  <p class="hint">Changes apply instantly to open YouTube tabs.</p>
+    <label class="row">
+      <span class="label">Hide Shorts</span>
+      <input type="checkbox" id="hideShorts" checked>
+      <span class="switch"></span>
+    </label>
+
+    <label class="row">
+      <span class="label">Auto PiP</span>
+      <input type="checkbox" id="autoPip">
+      <span class="switch"></span>
+    </label>
+
+    <div id="autoPipFlagRow" class="sub-helper-row">
+      <span class="sub-helper-text">Alt+Tab / Window PiP:</span>
+      <a href="#" id="openFlagLink" class="flag-link" title="Open Chrome's native flag for Alt+Tab Auto-PiP">Enable Flag ↗</a>
+    </div>
+
+    <div class="row shortcut-row">
+      <span class="label">PiP shortcut</span>
+      <div class="shortcut-group">
+        <button type="button" id="pipShortcutBtn" class="shortcut-chip" title="Click to record keys">Ctrl+Shift+8</button>
+        <button type="button" id="resetShortcutBtn" class="reset-btn" title="Reset to default (Ctrl+Shift+8)">↺</button>
+      </div>
+    </div>
+
+    <div class="preset-row">
+      <span class="preset-label">Quick:</span>
+      <button type="button" class="preset-chip" data-shortcut="Ctrl+Shift+8">Ctrl+Shift+8</button>
+      <button type="button" class="preset-chip" data-shortcut="Alt+P">Alt+P</button>
+      <button type="button" class="preset-chip" data-shortcut="Alt+X">Alt+X</button>
+    </div>
+
+    <div id="shortcutStatus" class="shortcut-status"></div>
+  </div>
+
+  <div class="footer">
+    <a href="#" id="openShortcutsLink" class="shortcuts-link" title="Open Chrome's shortcut manager to configure global shortcut">⚙ Configure global shortcut in Chrome ↗</a>
+  </div>
 
   <script src="popup.js"></script>
 </body>
