@@ -65,6 +65,38 @@
     overflow-x: hidden;
   }
 
+  /* Allow ambient light (cinematics) to bleed naturally underneath suggestions */
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary,
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary-inner {
+    background: transparent !important;
+  }
+
+  html.yt-split-scroll ytd-watch-flexy #cinematics {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    overflow: visible !important;
+    mask-image: linear-gradient(to right, black 55%, rgba(0, 0, 0, 0.5) 75%, transparent 95%) !important;
+    -webkit-mask-image: linear-gradient(to right, black 55%, rgba(0, 0, 0, 0.5) 75%, transparent 95%) !important;
+  }
+
+  html.yt-split-scroll ytd-watch-flexy #cinematics-container {
+    overflow: visible !important;
+    max-width: none !important;
+    contain: none !important;
+    clip-path: none !important;
+  }
+
+  html.yt-split-scroll ytd-watch-flexy #cinematics canvas {
+    overflow: visible !important;
+    max-width: none !important;
+    contain: none !important;
+    clip-path: none !important;
+    transform: scaleX(1.3) !important;
+    transform-origin: left center !important;
+    will-change: transform;
+    opacity: 0.95;
+  }
+
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   /*  Subtle scrollbars (Firefox-native scrollbar-* properties)  */
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -127,4 +159,30 @@
     background: var(--yt-spec-base-background, #0f0f0f);
   }
 }
+
+/* ──────────────────────────────────────────────────────────── */
+/*  Phase 3: Hide YouTube Shorts Everywhere                    */
+/*  Activated by the class html.yt-split-scroll-hide-shorts    */
+/* ──────────────────────────────────────────────────────────── */
+
+/* Shorts shelves in Home, Subscriptions & Channel feeds */
+html.yt-split-scroll-hide-shorts ytd-reel-shelf-renderer,
+html.yt-split-scroll-hide-shorts ytd-rich-shelf-renderer[is-shorts],
+html.yt-split-scroll-hide-shorts ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
+html.yt-split-scroll-hide-shorts ytd-rich-section-renderer:has(ytd-reel-shelf-renderer),
+
+/* Individual Shorts items in feeds & search */
+html.yt-split-scroll-hide-shorts ytd-rich-item-renderer:has(a[href*="/shorts/"]),
+html.yt-split-scroll-hide-shorts ytd-video-renderer:has(a[href*="/shorts/"]),
+html.yt-split-scroll-hide-shorts ytd-grid-video-renderer:has(a[href*="/shorts/"]),
+html.yt-split-scroll-hide-shorts ytd-compact-video-renderer:has(a[href*="/shorts/"]),
+
+/* Shorts tab in main navigation & mini-guide sidebar */
+html.yt-split-scroll-hide-shorts ytd-guide-entry-renderer:has(a[title="Shorts"]),
+html.yt-split-scroll-hide-shorts ytd-guide-entry-renderer:has(a[href*="/shorts"]),
+html.yt-split-scroll-hide-shorts ytd-mini-guide-entry-renderer:has(a[title="Shorts"]),
+html.yt-split-scroll-hide-shorts ytd-mini-guide-entry-renderer:has(a[href*="/shorts"]) {
+  display: none !important;
+}
+
 
