@@ -1,6 +1,6 @@
-# YouTube Split Scroll
+# TubeDeck for YouTube
 
-A Chrome & Firefox extension that makes YouTube's left column (video player, title, comments) and right column (suggested videos) scroll independently — so browsing suggestions never pushes the video off screen.
+A power-user Chrome & Firefox extension that elevates your YouTube experience with dual-column independent scrolling, sticky video pinning, YouTube Shorts suppression, invisible scrollbars, and seamless Auto Picture-in-Picture.
 
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue)
 
