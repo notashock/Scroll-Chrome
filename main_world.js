@@ -1,6 +1,6 @@
 /**
- * YouTube Split Scroll – Main World Script
- * ========================================
+ * TubeDeck – Main World Script
+ * ============================
  * Runs natively in YouTube's MAIN execution world via manifest.json content_scripts.
  * Connects to the browser's MediaSession API so Chrome can automatically transition
  * the video into Picture-in-Picture on tab switch without requiring a synthetic user gesture.

@@ -1,6 +1,6 @@
 /**
- * YouTube Split Scroll – Content Script
- * ======================================
+ * TubeDeck – Content Script
+ * =========================
  * Lightweight & optimized for low-spec systems:
  *  - Native browser autoPictureInPicture & MediaSession integration (no gesture drop errors)
  *  - Global Picture-in-Picture dismissals via background service worker and Ctrl+Shift+8

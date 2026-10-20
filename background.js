@@ -1,6 +1,6 @@
 /**
- * YouTube Split Scroll – Background Service Worker
- * ===============================================
+ * TubeDeck – Background Service Worker
+ * ====================================
  * Handles global Picture-in-Picture shortcuts, syncs shortcuts from chrome.commands,
  * tracks active PiP across all YouTube tabs, and handles window focus (Alt+Tab) for Auto-PiP.
  */
