@@ -8,38 +8,53 @@
   <div class="header">
     <div class="logo">
       <span class="dot"></span>
-      <span class="title">Split Scroll</span>
+      <span class="title">TubeDeck</span>
     </div>
-    <span class="version">v0.3.3</span>
+    <span class="version">v0.4.0</span>
   </div>
 
   <div class="list">
     <label class="row">
-      <span class="label">Split scrolling</span>
+      <div class="item-info">
+        <span class="label">Split scrolling</span>
+        <span class="sublabel">Dual independent columns</span>
+      </div>
       <input type="checkbox" id="enabled" checked>
       <span class="switch"></span>
     </label>
 
     <label class="row">
-      <span class="label">Sticky player</span>
+      <div class="item-info">
+        <span class="label">Sticky player</span>
+        <span class="sublabel">Pin video while browsing</span>
+      </div>
       <input type="checkbox" id="stickyPlayer">
       <span class="switch"></span>
     </label>
 
     <label class="row">
-      <span class="label">Hide scrollbars</span>
-      <input type="checkbox" id="hideScrollbars" checked>
-      <span class="switch"></span>
-    </label>
-
-    <label class="row">
-      <span class="label">Hide Shorts</span>
+      <div class="item-info">
+        <span class="label">Hide Shorts</span>
+        <span class="sublabel">Clean feeds & suggestions</span>
+      </div>
       <input type="checkbox" id="hideShorts" checked>
       <span class="switch"></span>
     </label>
 
     <label class="row">
-      <span class="label">Auto PiP</span>
+      <div class="item-info">
+        <span class="label">Hide scrollbars</span>
+        <span class="sublabel">Clean invisible scrolling</span>
+      </div>
+      <input type="checkbox" id="hideScrollbars" checked>
+      <span class="switch"></span>
+    </label>
+
+    <label class="row">
+      <div class="item-info">
+        <span class="label">Auto PiP</span>
+        <span class="sublabel">Float video on tab / window switch</span>
+      </div>
       <input type="checkbox" id="autoPip">
       <span class="switch"></span>
     </label>
@@ -49,26 +64,17 @@
       <a href="#" id="openFlagLink" class="flag-link" title="Open Chrome's native flag for Alt+Tab Auto-PiP">Enable Flag ↗</a>
     </div>
 
-    <div class="row shortcut-row">
-      <span class="label">PiP shortcut</span>
-      <div class="shortcut-group">
-        <button type="button" id="pipShortcutBtn" class="shortcut-chip" title="Click to record keys">Ctrl+Shift+8</button>
-        <button type="button" id="resetShortcutBtn" class="reset-btn" title="Reset to default (Ctrl+Shift+8)">↺</button>
-      </div>
-    </div>
-
-    <div class="preset-row">
-      <span class="preset-label">Quick:</span>
-      <button type="button" class="preset-chip" data-shortcut="Ctrl+Shift+8">Ctrl+Shift+8</button>
-      <button type="button" class="preset-chip" data-shortcut="Alt+P">Alt+P</button>
-      <button type="button" class="preset-chip" data-shortcut="Alt+X">Alt+X</button>
-    </div>
-
-    <div id="shortcutStatus" class="shortcut-status"></div>
+    <div id="statusBanner" class="status-banner"></div>
   </div>
 
   <div class="footer">
-    <a href="#" id="openShortcutsLink" class="shortcuts-link" title="Open Chrome's shortcut manager to configure global shortcut">⚙ Configure global shortcut in Chrome ↗</a>
+    <div class="shortcut-tip">
+      <span class="tip-label">PiP:</span>
+      <kbd>Ctrl+Shift+8</kbd>
+      <span class="tip-sep">or</span>
+      <kbd>Alt+P</kbd>
+    </div>
+    <a href="#" id="openShortcutsLink" class="shortcuts-link" title="Customize global shortcuts in Chrome">Customize in Chrome ↗</a>
   </div>
 
   <script src="popup.js"></script>
