@@ -111,25 +111,32 @@
     syncAmbientState();
   }
 
-  /* ── Infinite Scroll Sentinel Watcher (Throttled for low-spec CPUs) ─ */
+  /* ── Infinite Scroll Sentinel Watcher (Prioritizes Video Playback) ── */
 
   function triggerLoad(entry) {
     if (!entry.isIntersecting) return;
 
     const now = Date.now();
-    if (now - lastSentinelTriggerTime < 350) return; // Max 1 trigger per 350ms
+    if (now - lastSentinelTriggerTime < 1200) return; // Conservative 1.2s throttle to protect video decoding
     lastSentinelTriggerTime = now;
 
     const el = entry.target;
-    const btn = el.querySelector("button, tp-yt-paper-button, yt-button-renderer button");
-    if (btn) {
-      btn.click();
-      return;
-    }
+    // Defer suggestion loading to browser idle periods so video gets 100% GPU priority
+    const scheduleTask = typeof window.requestIdleCallback === "function"
+      ? (cb) => window.requestIdleCallback(cb, { timeout: 1000 })
+      : (cb) => setTimeout(cb, 60);
 
-    try {
-      window.dispatchEvent(new Event("scroll"));
-    } catch (_) {}
+    scheduleTask(() => {
+      const btn = el.querySelector("button, tp-yt-paper-button, yt-button-renderer button");
+      if (btn) {
+        btn.click();
+        return;
+      }
+
+      try {
+        window.dispatchEvent(new Event("scroll"));
+      } catch (_) {}
+    });
   }
 
   function setupContinuationObserver() {
@@ -150,7 +157,7 @@
         (entries) => entries.forEach(triggerLoad),
         {
           root: secondary,
-          rootMargin: "0px 0px 400px 0px",
+          rootMargin: "0px 0px 120px 0px", // Only request when nearing bottom, not 400px early
           threshold: 0,
         }
       );
@@ -470,16 +477,87 @@
     currentObservedVideo = null;
   }
 
-  document.addEventListener("yt-navigate-start", () => {
-    if (!isWatchPage()) {
-      cleanupWatchPage();
+  /* ── YouTube Logo Click to Miniplayer ────────────────────────────── */
+
+  function handleLogoClick(e) {
+    if (!currentSettings.enabled) return;
+
+    // Check if clicked target is or is inside YouTube's topbar logo
+    const logoLink = e.target.closest("a#logo, ytd-topbar-logo-renderer, a.ytd-topbar-logo-renderer");
+    if (!logoLink) return;
+
+    // Only intercept when watching a video on the watch page
+    if (!isWatchPage()) return;
+
+    const video = findVideoElement();
+    if (!video || video.ended) return;
+
+    // Prevent default navigation to Home so video is not destroyed
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Trigger native miniplayer via main world event & direct click fallback
+    try {
+      window.dispatchEvent(new CustomEvent("yt-deck-toggle-miniplayer"));
+    } catch (_) {}
+
+    const miniBtn =
+      document.querySelector(".ytp-miniplayer-button") ||
+      document.querySelector("button[data-tooltip-target-id='ytp-miniplayer-button']") ||
+      document.querySelector(".ytp-button.ytp-miniplayer-button");
+
+    if (miniBtn) {
+      try {
+        miniBtn.click();
+      } catch (_) {}
     }
-  });
+  }
+
+  document.addEventListener("click", handleLogoClick, true);
+
+  /* ── Miniplayer State Sync for Ambient Glow Persistence ─────────── */
+
+  let miniplayerObs = null;
+
+  function syncMiniplayerState() {
+    try {
+      const miniplayer = document.querySelector("ytd-miniplayer");
+      const isActive =
+        miniplayer &&
+        (miniplayer.hasAttribute("active") ||
+          miniplayer.getAttribute("active") === "" ||
+          miniplayer.getAttribute("active") === "true");
+
+      document.documentElement.classList.toggle(
+        "yt-split-scroll-miniplayer-active",
+        Boolean(currentSettings.enabled && isActive)
+      );
+    } catch (_) {}
+  }
+
+  function setupMiniplayerObserver() {
+    if (miniplayerObs) return;
+
+    const miniplayer = document.querySelector("ytd-miniplayer");
+    if (!miniplayer) return;
+
+    miniplayerObs = new MutationObserver(() => {
+      syncMiniplayerState();
+    });
+
+    miniplayerObs.observe(miniplayer, {
+      attributes: true,
+      attributeFilter: ["active"],
+    });
+
+    syncMiniplayerState();
+  }
 
   /* ── Initialization ───────────────────────────────────────────────── */
 
   function init() {
     applyClasses();
+    setupMiniplayerObserver();
 
     if (!isWatchPage()) {
       cleanupWatchPage();
@@ -511,6 +589,12 @@
   } catch (_) {
     init();
   }
+
+  document.addEventListener("yt-navigate-start", () => {
+    if (!isWatchPage()) {
+      cleanupWatchPage();
+    }
+  });
 
   document.addEventListener("yt-navigate-finish", () => {
     init();

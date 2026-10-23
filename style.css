@@ -142,14 +142,15 @@
     min-height: 100vh !important;
     max-width: none !important;
     max-height: none !important;
-    transform: translate(-50%, -50%) scale(1.4) !important;
+    transform: translate3d(-50%, -50%, 0) scale(1.45) !important;
     transform-origin: center center !important;
     object-fit: cover !important;
     contain: none !important;
     clip-path: none !important;
-    filter: saturate(1.85) brightness(1.22) contrast(1.15) blur(42px) !important;
-    opacity: 0.96 !important;
-    will-change: transform, filter;
+    backface-visibility: hidden !important;
+    filter: saturate(2.3) brightness(1.38) contrast(1.2) blur(24px) !important;
+    opacity: 1 !important;
+    will-change: transform;
   }
 
   /* Stacking context: Keep interactive columns cleanly layered over fixed canvas */
@@ -158,45 +159,154 @@
     z-index: 1;
   }
 
-  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #player-full-bleed-container,
-  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #full-bleed-container {
+  /* GPU Video Priority & Layout Isolation: Video decoding never yields to background suggestions */
+  ytd-watch-flexy #player-container-outer,
+  ytd-watch-flexy #player-container,
+  ytd-watch-flexy #ytd-player,
+  ytd-watch-flexy #movie_player,
+  ytd-watch-flexy #movie_player video,
+  ytd-watch-flexy video.html5-main-video {
     position: relative;
-    z-index: 2;
+    z-index: 5 !important;
+    transform: translateZ(0);
+    contain: layout paint;
   }
 
-  /* Frosted Glassmorphism Scrims for text readability on bright video scenes */
+  /* Offload off-screen suggestions: GPU skips rasterization & decoding until scrolled near view */
+  html.yt-split-scroll ytd-watch-flexy #secondary ytd-compact-video-renderer {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 94px;
+  }
+
+  /* Match YouTube action button glassmorphism (Like, Dislike, Share pills) */
   html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #secondary,
   html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #secondary-inner {
     background: transparent !important;
   }
 
   html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #secondary #items {
-    background: rgba(15, 15, 15, 0.65) !important;
-    backdrop-filter: blur(16px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-    border-radius: 16px;
-    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-radius: 12px;
+    padding: 10px 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
   }
 
   html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) ytd-watch-metadata #description {
-    background: rgba(15, 15, 15, 0.65) !important;
-    backdrop-filter: blur(16px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #comments {
-    background: rgba(15, 15, 15, 0.65) !important;
-    backdrop-filter: blur(16px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-radius: 12px;
     padding: 16px 20px;
     margin-top: 16px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
+  }
+
+  /* ──────────────────────────────────────────────────────────── */
+  /*  Translucent Search Capsule (Low-Spec Hardware Optimized)    */
+  /* ──────────────────────────────────────────────────────────── */
+
+  html.yt-split-scroll ytd-searchbox #container.ytd-searchbox {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-right: none !important;
+    border-radius: 40px 0 0 40px !important;
+    box-shadow: none !important;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  html.yt-split-scroll ytd-searchbox[has-focus] #container.ytd-searchbox {
+    background: rgba(255, 255, 255, 0.14) !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+  }
+
+  html.yt-split-scroll ytd-searchbox #search-icon-legacy.ytd-searchbox {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 0 40px 40px 0 !important;
+    box-shadow: none !important;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  html.yt-split-scroll ytd-searchbox #search-icon-legacy.ytd-searchbox:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
+  }
+
+  html.yt-split-scroll #voice-search-button yt-icon-button,
+  html.yt-split-scroll #voice-search-button button {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    transition: background 0.15s ease;
+  }
+
+  html.yt-split-scroll #voice-search-button:hover yt-icon-button,
+  html.yt-split-scroll #voice-search-button:hover button {
+    background: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  /* Search autocomplete suggestions dropdown */
+  html.yt-split-scroll .sbdd_b,
+  html.yt-split-scroll .sbsb_a {
+    background: rgba(18, 18, 22, 0.96) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6) !important;
+  }
+
+  html.yt-split-scroll .sbsb_c:hover,
+  html.yt-split-scroll .sbsb_d {
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* ──────────────────────────────────────────────────────────── */
+  /*  Miniplayer & Home Feed Ambient Glow Persistence            */
+  /* ──────────────────────────────────────────────────────────── */
+
+  html.yt-split-scroll.yt-split-scroll-full-ambient.yt-split-scroll-miniplayer-active ytd-watch-flexy {
+    display: block !important;
+    visibility: visible !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: visible !important;
+    pointer-events: none !important;
+    z-index: 0 !important;
+  }
+
+  html.yt-split-scroll.yt-split-scroll-full-ambient.yt-split-scroll-miniplayer-active ytd-watch-flexy #cinematics {
+    display: block !important;
+    visibility: visible !important;
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 0 !important;
+    pointer-events: none !important;
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+  }
+
+  html.yt-split-scroll.yt-split-scroll-full-ambient.yt-split-scroll-miniplayer-active ytd-watch-flexy #columns {
+    display: none !important;
+  }
+
+  /* Make home page feed background transparent so ambient light shows through */
+  html.yt-split-scroll.yt-split-scroll-full-ambient.yt-split-scroll-miniplayer-active #page-manager,
+  html.yt-split-scroll.yt-split-scroll-full-ambient.yt-split-scroll-miniplayer-active ytd-browse[page-subtype="home"] {
+    background: transparent !important;
+  }
+
+  /* Miniplayer subtle glassmorphic dock frame */
+  html.yt-split-scroll ytd-miniplayer[active] {
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
+    z-index: 2000 !important;
   }
 
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */

@@ -99,6 +99,32 @@
     setTimeout(ensureCinematicsEnabled, 500);
   });
 
+  // Listen for logo click request from content script to trigger native miniplayer
+  window.addEventListener("yt-deck-toggle-miniplayer", () => {
+    try {
+      const miniBtn =
+        document.querySelector(".ytp-miniplayer-button") ||
+        document.querySelector("button[data-tooltip-target-id='ytp-miniplayer-button']") ||
+        document.querySelector(".ytp-button.ytp-miniplayer-button");
+
+      if (miniBtn) {
+        miniBtn.click();
+        return;
+      }
+
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "i",
+          code: "KeyI",
+          keyCode: 73,
+          which: 73,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    } catch (_) {}
+  });
+
   registerMediaSession();
   ensureCinematicsEnabled();
 })();
