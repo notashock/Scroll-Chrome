@@ -53,6 +53,24 @@
     } catch (_) {}
   }
 
+  function isFullAmbientActive() {
+    return document.documentElement.getAttribute("data-yt-split-scroll-full-ambient") === "true";
+  }
+
+  function ensureCinematicsEnabled() {
+    if (!isFullAmbientActive()) return;
+
+    try {
+      const player =
+        document.getElementById("movie_player") ||
+        document.querySelector(".html5-video-player");
+
+      if (player && typeof player.setOption === "function") {
+        player.setOption("cinematics", "enabled", true);
+      }
+    } catch (_) {}
+  }
+
   // Intercept setActionHandler to prevent YouTube from clearing our enterpictureinpicture handler
   if ("mediaSession" in navigator && typeof navigator.mediaSession.setActionHandler === "function") {
     const originalSet = navigator.mediaSession.setActionHandler.bind(navigator.mediaSession);
@@ -64,14 +82,23 @@
     };
   }
 
-  // React to auto-pip attribute changes from content script
+  // React to attribute changes from content script
   const observer = new MutationObserver(() => {
     registerMediaSession();
+    ensureCinematicsEnabled();
   });
   observer.observe(document.documentElement, {
     attributes: true,
-    attributeFilter: ["data-yt-split-scroll-auto-pip"],
+    attributeFilter: [
+      "data-yt-split-scroll-auto-pip",
+      "data-yt-split-scroll-full-ambient",
+    ],
+  });
+
+  document.addEventListener("yt-navigate-finish", () => {
+    setTimeout(ensureCinematicsEnabled, 500);
   });
 
   registerMediaSession();
+  ensureCinematicsEnabled();
 })();

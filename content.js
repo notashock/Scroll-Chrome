@@ -30,6 +30,7 @@
     hideScrollbars: true,
     hideShorts: true,
     autoPip: false,
+    fullAmbient: false,
     pipShortcut: DEFAULT_PIP_SHORTCUT,
   };
 
@@ -70,6 +71,16 @@
     } catch (_) {}
   }
 
+  function syncAmbientState() {
+    try {
+      const active = currentSettings.enabled && currentSettings.fullAmbient;
+      document.documentElement.setAttribute(
+        "data-yt-split-scroll-full-ambient",
+        active ? "true" : "false"
+      );
+    } catch (_) {}
+  }
+
   /* ── CSS Class Toggling ───────────────────────────────────────────── */
 
   function applyClasses() {
@@ -91,8 +102,13 @@
       "yt-split-scroll-auto-pip",
       currentSettings.enabled && currentSettings.autoPip
     );
+    root.classList.toggle(
+      "yt-split-scroll-full-ambient",
+      currentSettings.enabled && currentSettings.fullAmbient
+    );
 
     syncAutoPipState();
+    syncAmbientState();
   }
 
   /* ── Infinite Scroll Sentinel Watcher (Throttled for low-spec CPUs) ─ */
@@ -520,6 +536,9 @@
       }
       if (changes.autoPip !== undefined) {
         currentSettings.autoPip = changes.autoPip.newValue ?? DEFAULTS.autoPip;
+      }
+      if (changes.fullAmbient !== undefined) {
+        currentSettings.fullAmbient = changes.fullAmbient.newValue ?? DEFAULTS.fullAmbient;
       }
       if (changes.pipShortcut !== undefined) {
         currentSettings.pipShortcut = changes.pipShortcut.newValue ?? DEFAULT_PIP_SHORTCUT;

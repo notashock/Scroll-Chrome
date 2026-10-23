@@ -13,6 +13,7 @@
     hideScrollbars: true,
     hideShorts: true,
     autoPip: false,
+    fullAmbient: false,
   };
 
   const FLAG_URL = "chrome://flags/#auto-picture-in-picture-for-video-playback";
@@ -23,6 +24,7 @@
   const hideScrollbarsEl = document.getElementById("hideScrollbars");
   const hideShortsEl = document.getElementById("hideShorts");
   const autoPipEl = document.getElementById("autoPip");
+  const fullAmbientEl = document.getElementById("fullAmbient");
   const autoPipFlagRow = document.getElementById("autoPipFlagRow");
   const openFlagLink = document.getElementById("openFlagLink");
   const openShortcutsLink = document.getElementById("openShortcutsLink");
@@ -57,6 +59,9 @@
       hideScrollbarsEl.checked = settings.hideScrollbars ?? DEFAULTS.hideScrollbars;
       hideShortsEl.checked = settings.hideShorts ?? DEFAULTS.hideShorts;
       autoPipEl.checked = settings.autoPip ?? DEFAULTS.autoPip;
+      if (fullAmbientEl) {
+        fullAmbientEl.checked = settings.fullAmbient ?? DEFAULTS.fullAmbient;
+      }
 
       if (autoPipFlagRow) {
         autoPipFlagRow.style.display = autoPipEl.checked ? "flex" : "none";
@@ -77,6 +82,12 @@
   hideScrollbarsEl.addEventListener("change", () => {
     safeSetStorage({ hideScrollbars: hideScrollbarsEl.checked });
   });
+
+  if (fullAmbientEl) {
+    fullAmbientEl.addEventListener("change", () => {
+      safeSetStorage({ fullAmbient: fullAmbientEl.checked });
+    });
+  }
 
   hideShortsEl.addEventListener("change", () => {
     safeSetStorage({ hideShorts: hideShortsEl.checked });

@@ -13,7 +13,7 @@ A power-user Chrome & Firefox extension that elevates your YouTube experience wi
 - **Hidden scrollbars** (optional, enabled by default) — keep column scrolling completely invisible for a clean, minimalist UI without visual distraction.
 - **Picture-in-Picture (PiP) shortcut** — toggle floating PiP mode with an ergonomic shortcut (`Ctrl+Shift+8` global default that works even when the floating PiP window is focused; also supports `Alt+P`, `Alt+Shift+X`, and `Alt+X`).
 - **Auto PiP** (optional, disabled by default) — automatically enters PiP mode via Chrome's native MediaSession API when switching tabs. For window switching, Alt+Tab, or minimizing, enable Chrome's flag at `chrome://flags/#auto-picture-in-picture-for-video-playback` via the 1-click link in the popup. In-page playback smoothly restores when returning to the window.
-- **Ambient lighting blend** — smoothly bleeds YouTube's ambient glow underneath the suggestions column without any hard cutoffs.
+- **Ambient lighting blend & Full Ambient Glow** (optional, high-intensity mode) — smoothly bleeds YouTube's ambient glow across the page, with an optional full-viewport Ambilight mode that casts high-intensity video-reactive ambient lighting across the entire screen with frosted glassmorphism cards.
 - **Ultra-compact minimalist popup** — redesigned with instant 0ms opening performance, sleek micro-switches, and zero visual clutter.
 - **Theater & fullscreen safe** — the split scroll is automatically disabled in theater mode and fullscreen.
 - **Responsive** — narrow viewports (< 1016 px) keep YouTube's default single-column layout.
