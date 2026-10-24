@@ -93,8 +93,8 @@
     clip-path: none !important;
     transform: scaleX(1.3) !important;
     transform-origin: left center !important;
-    will-change: transform;
-    opacity: 0.95;
+    will-change: transform, opacity;
+    transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   }
 
   /* ──────────────────────────────────────────────────────────── */
@@ -130,6 +130,7 @@
     overflow: visible !important;
     contain: none !important;
     clip-path: none !important;
+    transition: filter 1.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   }
 
   html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #cinematics canvas {
@@ -149,8 +150,8 @@
     clip-path: none !important;
     backface-visibility: hidden !important;
     filter: saturate(2.3) brightness(1.38) contrast(1.2) blur(24px) !important;
-    opacity: 1 !important;
-    will-change: transform;
+    will-change: transform, opacity;
+    transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1), filter 1.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   }
 
   /* Stacking context: Keep interactive columns cleanly layered over fixed canvas */
@@ -206,59 +207,112 @@
   }
 
   /* ──────────────────────────────────────────────────────────── */
-  /*  Translucent Search Capsule (Low-Spec Hardware Optimized)    */
+  /*  TubeDeck – Frosted Glassmorphism Search Capsule            */
+  /*  Designed with depth, layered reflections & micro-glow      */
   /* ──────────────────────────────────────────────────────────── */
 
-  html.yt-split-scroll ytd-searchbox #container.ytd-searchbox {
-    background: rgba(255, 255, 255, 0.08) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  /* Ensure parent containers don't block backdrop visibility */
+  html.yt-split-scroll ytd-searchbox,
+  html.yt-split-scroll yt-searchbox,
+  html.yt-split-scroll #search-form.ytd-searchbox,
+  html.yt-split-scroll form.ytSearchboxComponentSearchForm {
+    background: transparent !important;
+  }
+
+  /* Frosted Glass Input Container */
+  html.yt-split-scroll ytd-searchbox #container.ytd-searchbox,
+  html.yt-split-scroll yt-searchbox #container,
+  html.yt-split-scroll .ytSearchboxComponentInputBox {
+    background: rgba(18, 18, 24, 0.65) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
     border-right: none !important;
     border-radius: 40px 0 0 40px !important;
-    box-shadow: none !important;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.1), 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+    transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   }
 
-  html.yt-split-scroll ytd-searchbox[has-focus] #container.ytd-searchbox {
-    background: rgba(255, 255, 255, 0.14) !important;
-    border-color: rgba(255, 255, 255, 0.22) !important;
+  /* Search input inner typography & transparency */
+  html.yt-split-scroll ytd-searchbox #search-input.ytd-searchbox,
+  html.yt-split-scroll ytd-searchbox input#search,
+  html.yt-split-scroll yt-searchbox input,
+  html.yt-split-scroll .ytSearchboxComponentInput {
+    background: transparent !important;
+    color: #f1f1f1 !important;
   }
 
-  html.yt-split-scroll ytd-searchbox #search-icon-legacy.ytd-searchbox {
-    background: rgba(255, 255, 255, 0.05) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  /* Focused State: Ethereal Cyan ambient rim */
+  html.yt-split-scroll ytd-searchbox[has-focus] #container.ytd-searchbox,
+  html.yt-split-scroll yt-searchbox[has-focus] #container,
+  html.yt-split-scroll ytd-searchbox #container.ytd-searchbox:focus-within,
+  html.yt-split-scroll .ytSearchboxComponentInputBox:focus-within {
+    background: rgba(22, 22, 30, 0.8) !important;
+    border-color: rgba(0, 210, 255, 0.45) !important;
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.15),
+                0 0 0 1px rgba(0, 210, 255, 0.3),
+                0 8px 30px rgba(0, 0, 0, 0.4) !important;
+  }
+
+  /* Frosted Glass Search Button (seamless right cap) */
+  html.yt-split-scroll ytd-searchbox #search-icon-legacy.ytd-searchbox,
+  html.yt-split-scroll yt-searchbox #search-icon-legacy,
+  html.yt-split-scroll .ytSearchboxComponentSearchButton {
+    background: rgba(25, 25, 34, 0.6) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
     border-radius: 0 40px 40px 0 !important;
-    box-shadow: none !important;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.08), 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+    transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   }
 
-  html.yt-split-scroll ytd-searchbox #search-icon-legacy.ytd-searchbox:hover {
-    background: rgba(255, 255, 255, 0.12) !important;
+  html.yt-split-scroll ytd-searchbox #search-icon-legacy.ytd-searchbox:hover,
+  html.yt-split-scroll yt-searchbox #search-icon-legacy:hover,
+  html.yt-split-scroll .ytSearchboxComponentSearchButton:hover {
+    background: rgba(35, 35, 46, 0.8) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
   }
 
+  /* Voice Search Orb (Matching Frosted Satellite) */
   html.yt-split-scroll #voice-search-button yt-icon-button,
-  html.yt-split-scroll #voice-search-button button {
-    background: rgba(255, 255, 255, 0.08) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    transition: background 0.15s ease;
+  html.yt-split-scroll #voice-search-button button,
+  html.yt-split-scroll .ytSearchboxComponentVoiceSearchButton {
+    background: rgba(22, 22, 30, 0.65) !important;
+    backdrop-filter: blur(16px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease !important;
   }
 
   html.yt-split-scroll #voice-search-button:hover yt-icon-button,
-  html.yt-split-scroll #voice-search-button:hover button {
-    background: rgba(255, 255, 255, 0.15) !important;
+  html.yt-split-scroll #voice-search-button:hover button,
+  html.yt-split-scroll .ytSearchboxComponentVoiceSearchButton:hover {
+    background: rgba(35, 35, 46, 0.85) !important;
+    border-color: rgba(0, 210, 255, 0.35) !important;
+    transform: scale(1.04);
   }
 
-  /* Search autocomplete suggestions dropdown */
+  /* Autocomplete Suggestions Dropdown – Deep Frosted Glass Layer */
   html.yt-split-scroll .sbdd_b,
   html.yt-split-scroll .sbsb_a {
-    background: rgba(18, 18, 22, 0.96) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    border-radius: 14px !important;
-    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6) !important;
+    background: rgba(16, 16, 22, 0.82) !important;
+    backdrop-filter: blur(28px) saturate(190%) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+    overflow: hidden !important;
   }
 
   html.yt-split-scroll .sbsb_c:hover,
   html.yt-split-scroll .sbsb_d {
-    background: rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
   }
 
   /* ──────────────────────────────────────────────────────────── */

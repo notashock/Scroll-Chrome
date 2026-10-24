@@ -105,9 +105,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "pip-started" && sender.tab?.id) {
     setPipInfo(sender.tab.id, sender.tab.windowId || null);
+    currentActiveYouTubeTabId = sender.tab.id;
+    if (sender.tab.windowId) {
+      currentActiveYouTubeWindowId = sender.tab.windowId;
+    }
     sendResponse({ received: true });
   } else if (message.action === "pip-stopped") {
     setPipInfo(null, null);
+    // Retain currentActiveYouTubeTabId and currentActiveYouTubeWindowId so subsequent Alt+Tab / focus changes still trigger
+    if (sender.tab?.id && sender.tab.url && sender.tab.url.includes("youtube.com")) {
+      currentActiveYouTubeTabId = sender.tab.id;
+      if (sender.tab.windowId) {
+        currentActiveYouTubeWindowId = sender.tab.windowId;
+      }
+    }
     sendResponse({ received: true });
   } else if (message.action === "sync-shortcuts") {
     syncCommandShortcuts().then(() => sendResponse({ synced: true }));
@@ -121,7 +132,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   } else if (message.action === "open-flags-page") {
     try {
-      chrome.tabs.create({ url: "chrome://flags/#auto-picture-in-picture-for-video-playback" });
+      const flagUrl = message.url || "chrome://flags/#auto-picture-in-picture-for-video-playback";
+      chrome.tabs.create({ url: flagUrl });
       sendResponse({ opened: true });
     } catch (_) {
       sendResponse({ opened: false });
@@ -134,22 +146,177 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   if (currentPipTabId === tabId) {
     await setPipInfo(null, null);
   }
+  if (lastActiveTabId === tabId) {
+    lastActiveTabId = null;
+  }
 });
 
-/* ── Window Focus Listener for Auto-PiP (Alt+Tab & Minimize) ─────── */
+/* ── Tab Switch Listener for Auto-PiP ────────────────────────────── */
+
+let lastActiveTabId = null;
+let currentActiveYouTubeTabId = null;
+let currentActiveYouTubeWindowId = null;
+
+async function initActiveTabTracking() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (tab?.id) {
+      lastActiveTabId = tab.id;
+      if (tab.url && tab.url.includes("youtube.com")) {
+        currentActiveYouTubeTabId = tab.id;
+        currentActiveYouTubeWindowId = tab.windowId;
+      }
+    }
+  } catch (_) {}
+}
+
+initActiveTabTracking();
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (tab && tab.active) {
+    lastActiveTabId = tabId;
+    if (tab.url && tab.url.includes("youtube.com")) {
+      currentActiveYouTubeTabId = tabId;
+      currentActiveYouTubeWindowId = tab.windowId;
+    }
+  }
+});
+
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const data = await chrome.storage.local.get({
+      enabled: true,
+      autoPip: true,
+    });
+    if (!data.enabled || !data.autoPip) {
+      lastActiveTabId = activeInfo.tabId;
+      return;
+    }
+
+    const { tabId: currentPipTabId } = await getPipInfo();
+
+    // 1. If returning to the YouTube tab with active PiP, restore video inside the tab
+    if (currentPipTabId && activeInfo.tabId === currentPipTabId) {
+      chrome.tabs.sendMessage(currentPipTabId, { action: "window-focused" }).catch(() => {});
+    }
+
+    // 2. If leaving a YouTube tab, tell the previously active tab to enter PiP
+    if (lastActiveTabId && lastActiveTabId !== activeInfo.tabId) {
+      try {
+        const prevTab = await chrome.tabs.get(lastActiveTabId);
+        if (prevTab?.id && prevTab.url && prevTab.url.includes("youtube.com")) {
+          chrome.tabs.sendMessage(prevTab.id, {
+            action: "enter-pip",
+            reason: "tab-switch",
+          }).catch(() => {});
+        }
+      } catch (_) {}
+    }
+
+    lastActiveTabId = activeInfo.tabId;
+
+    try {
+      const activeTab = await chrome.tabs.get(activeInfo.tabId);
+      if (activeTab?.url && activeTab.url.includes("youtube.com")) {
+        currentActiveYouTubeTabId = activeTab.id;
+        currentActiveYouTubeWindowId = activeTab.windowId;
+      } else {
+        currentActiveYouTubeTabId = null;
+      }
+    } catch (_) {}
+  } catch (_) {}
+});
+
+/* ── Window Focus & Minimize Listeners for Auto-PiP ───────────────── */
+
+chrome.windows.onBoundsChanged.addListener(async (win) => {
+  try {
+    const data = await chrome.storage.local.get({
+      enabled: true,
+      autoPip: true,
+      pipOnMinimize: true,
+    });
+    if (!data.enabled || !data.autoPip || !data.pipOnMinimize) return;
+
+    if (win && win.state === "minimized") {
+      const [tab] = await chrome.tabs.query({ active: true, windowId: win.id });
+      if (tab?.id && tab.url && tab.url.includes("youtube.com")) {
+        chrome.tabs.sendMessage(tab.id, {
+          action: "enter-pip",
+          reason: "minimized",
+        }).catch(() => {});
+      }
+    } else if (win && (win.state === "normal" || win.state === "maximized")) {
+      const { tabId: currentPipTabId, windowId: currentPipWindowId } = await getPipInfo();
+      if (currentPipTabId && currentPipWindowId && win.id === currentPipWindowId) {
+        chrome.tabs.sendMessage(currentPipTabId, { action: "window-focused" }).catch(() => {});
+      }
+    }
+  } catch (_) {}
+});
 
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
   try {
-    const data = await chrome.storage.local.get({ enabled: true, autoPip: false });
+    const data = await chrome.storage.local.get({
+      enabled: true,
+      autoPip: true,
+      pipOnMinimize: true,
+    });
     if (!data.enabled || !data.autoPip) return;
 
-    const { tabId: currentPipTabId, windowId: currentPipWindowId } = await getPipInfo();
+    if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+      // 1. If switching away from an active YouTube window to another browser window:
+      if (
+        data.pipOnMinimize &&
+        currentActiveYouTubeWindowId &&
+        windowId !== currentActiveYouTubeWindowId &&
+        currentActiveYouTubeTabId
+      ) {
+        chrome.tabs.sendMessage(currentActiveYouTubeTabId, {
+          action: "enter-pip",
+          reason: "window-switched",
+        }).catch(() => {});
+      }
 
-    if (windowId === chrome.windows.WINDOW_ID_NONE) {
-      // Switched away to an external application (PiP floats on top of the external app)
-    } else if (currentPipTabId && currentPipWindowId && windowId === currentPipWindowId) {
-      // The exact Chrome window with YouTube regained active focus: exit PiP cleanly
-      chrome.tabs.sendMessage(currentPipTabId, { action: "window-focused" }).catch(() => {});
+      // 2. Query and update tracking for the newly focused window:
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, windowId });
+        if (activeTab?.id) {
+          lastActiveTabId = activeTab.id;
+          if (activeTab.url && activeTab.url.includes("youtube.com")) {
+            currentActiveYouTubeTabId = activeTab.id;
+            currentActiveYouTubeWindowId = windowId;
+          }
+        }
+      } catch (_) {}
+
+      // 3. Returning focus to the browser window with YouTube that had PiP open:
+      const { tabId: currentPipTabId, windowId: currentPipWindowId } = await getPipInfo();
+      if (currentPipTabId && currentPipWindowId && windowId === currentPipWindowId) {
+        chrome.tabs.sendMessage(currentPipTabId, { action: "window-focused" }).catch(() => {});
+      }
+      return;
+    }
+
+    // 4. Alt+Tab or defocusing away from all browser windows (windowId === WINDOW_ID_NONE):
+    if (data.pipOnMinimize) {
+      if (currentActiveYouTubeTabId) {
+        chrome.tabs.sendMessage(currentActiveYouTubeTabId, {
+          action: "enter-pip",
+          reason: "alt-tab-defocused",
+        }).catch(() => {});
+      } else {
+        // Fallback: trigger PiP on any currently active YouTube tab
+        const ytTabs = await chrome.tabs.query({ active: true, url: "*://*.youtube.com/*" });
+        for (const tab of ytTabs) {
+          if (tab.id) {
+            chrome.tabs.sendMessage(tab.id, {
+              action: "enter-pip",
+              reason: "alt-tab-defocused",
+            }).catch(() => {});
+          }
+        }
+      }
     }
   } catch (_) {}
 });

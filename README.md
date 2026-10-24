@@ -10,73 +10,61 @@ A power-user Chrome & Firefox extension that elevates your YouTube experience wi
 
 - **Independent column scrolling** — the primary (left) and secondary (right) columns each get their own scrollbar on the YouTube watch page.
 - **Hide Shorts everywhere** (optional, enabled by default) — eliminates YouTube Shorts shelves, feed items, watch recommendations, and navigation drawer links for a distraction-free experience.
-- **Hidden scrollbars** (optional, enabled by default) — keep column scrolling completely invisible for a clean, minimalist UI without visual distraction.
+- **Hidden scrollbars** (enabled by default) — keep column scrolling completely invisible for a clean, minimalist UI without visual distraction.
 - **Picture-in-Picture (PiP) shortcut** — toggle floating PiP mode with an ergonomic shortcut (`Ctrl+Shift+8` global default that works even when the floating PiP window is focused; also supports `Alt+P`, `Alt+Shift+X`, and `Alt+X`).
-- **Auto PiP** (optional, disabled by default) — automatically enters PiP mode via Chrome's native MediaSession API when switching tabs. For window switching, Alt+Tab, or minimizing, enable Chrome's flag at `chrome://flags/#auto-picture-in-picture-for-video-playback` via the 1-click link in the popup. In-page playback smoothly restores when returning to the window.
-- **Ambient lighting blend & Full Ambient Glow** (optional, high-intensity mode) — smoothly bleeds YouTube's ambient glow across the page, with an optional full-viewport Ambilight mode that casts high-intensity video-reactive ambient lighting across the entire screen and persists even on the Home feed during miniplayer playback.
+- **Auto PiP & Minimize PiP** — automatically enters floating PiP mode when switching tabs, minimizing the browser, or switching applications via Alt+Tab. The popup dynamically adapts: on native browsers like Helium, it provides a clean setup card with direct Flag & Site Permission links; on non-native browsers like Brave, it presents interactive toggles.
+- **Silky Ambient Lighting Blend & Full Ambilight** (optional) — gently morphs YouTube's ambient lighting with smooth 1.2s transitions between scene changes, preventing jarring color flashes.
+- **Instant Lightweight Startup** — runs at `document_start` with cached settings for zero-flicker styling and near-zero CPU footprint.
 - **Logo click to miniplayer** — clicking the YouTube logo while watching a video docks it into YouTube's native miniplayer while taking you to the Home feed, seamlessly preserving playback and ambient glow.
 - **Translucent search capsule & button-style glassmorphism** — sleek, low-spec hardware optimized translucency matching YouTube's action buttons across the search bar, comments, and sidebar with zero GPU blur penalty.
 - **Ultra-compact minimalist popup** — redesigned with instant 0ms opening performance, sleek micro-switches, and zero visual clutter.
 - **Theater & fullscreen safe** — the split scroll is automatically disabled in theater mode and fullscreen.
 - **Responsive** — narrow viewports (< 1016 px) keep YouTube's default single-column layout.
 - **Toolbar toggle** — click the extension icon to configure features instantly with real-time sync across all open YouTube tabs.
-- **Sticky player** (optional) — pin the video player to the top of the left column while scrolling comments.
 - **Infinite scroll preserved** — a content script ensures YouTube's "load more suggestions" still triggers when you scroll inside the sidebar.
 
 ---
 
-## Install
+## Installation (Chrome, Helium, Brave, Edge)
 
-### Option A: Temporary install (for development)
+1. Open your browser's extension manager:
+   - **Chrome**: `chrome://extensions`
+   - **Helium**: `helium://extensions`
+   - **Brave**: `brave://extensions`
+   - **Edge**: `edge://extensions`
+2. Enable **Developer mode** (toggle in the top-right corner).
+3. Click **Load unpacked** (top-left).
+4. Select this directory (`Scroll-Chrome`).
+5. TubeDeck is now loaded and active!
 
-1. Open Firefox and go to `about:debugging#/runtime/this-firefox`.
-2. Click **"Load Temporary Add-on…"**.
-3. Navigate to this project folder and select `manifest.json`.
-4. The extension is now active. It will be removed when you close Firefox.
+---
 
-### Option B: Live-reload with `web-ext`
+## Auto Picture-in-Picture Setup (Tab Switch & Alt+Tab)
 
-```bash
-# Install web-ext globally (requires Node.js ≥ 18)
-npm install -g web-ext
+Chromium enforces two native browser requirements for videos to automatically float into Picture-in-Picture when switching tabs:
 
-# Run from the project root
-cd path/to/Scroll
-npx web-ext run --firefox="C:\Program Files\Mozilla Firefox\firefox.exe"
+### 1. Enable Browser Flag
+1. Navigate to: `chrome://flags/#auto-picture-in-picture-for-video-playback` (or `helium://flags` / `brave://flags`).
+2. Set **Automatic Picture-in-Picture for video playback** to **Enabled**.
+3. Relaunch your browser.
 
-# Or if Firefox is on PATH:
-npx web-ext run
-```
+### 2. Allow Site Permission for YouTube (Mandatory for Tab Switch)
+1. Open YouTube (`https://www.youtube.com`).
+2. Click the **Tune / Site information icon** (sliders or lock icon on the left of the address bar next to the URL).
+3. Click **Site settings**.
+4. Find **Automatic picture-in-picture** and change it from *Ask* to **Allow**.
+   *(Alternatively, visit `chrome://settings/content/autoPictureInPicture` or `helium://settings/content/autoPictureInPicture` and add `https://www.youtube.com` under Allowed).*
 
-`web-ext run` launches a clean Firefox profile with the extension loaded. It auto-reloads when you edit files.
+Once granted, playback automatically transitions into a floating PiP window on tab switch, window minimize, or Alt+Tab, and returns to the webpage seamlessly when you refocus.
 
-Useful flags:
-- `--firefox-profile=<name>` — use an existing profile instead of a temporary one.
-- `--keep-profile-changes` — persist changes to the profile between runs.
-- `--start-url="https://www.youtube.com/watch?v=dQw4w9WgXcQ"` — open a test page on launch.
+---
 
-### Option C: Permanent install (unsigned)
+## Keyboard Shortcuts & PiP Controls
 
-Firefox stable requires all extensions to be signed. To install unsigned:
-
-1. Use **Firefox Developer Edition**, **Nightly**, or **ESR**.
-2. Go to `about:config` and set `xpinstall.signatures.required` to `false`.
-3. Package the extension: `npx web-ext build` (creates a `.zip` in `web-ext-artifacts/`).
-4. Rename the `.zip` to `.xpi`.
-5. Drag the `.xpi` into Firefox, or go to `about:addons` → gear icon → "Install Add-on From File…".
-
-### Option D: Signed via addons.mozilla.org (permanent on any Firefox)
-
-1. Create an account at [addons.mozilla.org](https://addons.mozilla.org).
-2. Go to **Developer Hub** → **Submit a New Add-on**.
-3. Choose **"On your own"** (unlisted / self-distributed) if you don't want it in the public store.
-4. Upload the `.zip` from `npx web-ext build`.
-5. Mozilla will auto-sign it. Download the signed `.xpi` and install it in Firefox.
-
-Alternatively, use the CLI:
-```bash
-npx web-ext sign --api-key=YOUR_JWT_ISSUER --api-secret=YOUR_JWT_SECRET --channel=unlisted
-```
+- **Toggle Picture-in-Picture (Global):** `Ctrl+Shift+8` (works anywhere in the OS, even when the floating PiP window is focused).
+- **In-Page Alternate Shortcuts:** `Alt+P`, `Alt+Shift+X`, or `Alt+X`.
+- **In-Player Dedicated Button:** Click the custom PiP icon directly inside YouTube's right control bar next to the miniplayer.
+- **Dock to Miniplayer:** Click the YouTube logo in the top-left while watching a video to dock playback to the bottom-right miniplayer without losing playback.
 
 ---
 

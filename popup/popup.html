@@ -25,28 +25,10 @@
 
     <label class="row">
       <div class="item-info">
-        <span class="label">Sticky player</span>
-        <span class="sublabel">Pin video while browsing</span>
-      </div>
-      <input type="checkbox" id="stickyPlayer">
-      <span class="switch"></span>
-    </label>
-
-    <label class="row">
-      <div class="item-info">
         <span class="label">Hide Shorts</span>
         <span class="sublabel">Clean feeds & suggestions</span>
       </div>
       <input type="checkbox" id="hideShorts" checked>
-      <span class="switch"></span>
-    </label>
-
-    <label class="row">
-      <div class="item-info">
-        <span class="label">Hide scrollbars</span>
-        <span class="sublabel">Clean invisible scrolling</span>
-      </div>
-      <input type="checkbox" id="hideScrollbars" checked>
       <span class="switch"></span>
     </label>
 
@@ -59,18 +41,48 @@
       <span class="switch"></span>
     </label>
 
-    <label class="row">
-      <div class="item-info">
-        <span class="label">Auto PiP</span>
-        <span class="sublabel">Float video on tab / window switch</span>
-      </div>
-      <input type="checkbox" id="autoPip">
-      <span class="switch"></span>
-    </label>
+    <!-- Non-native (Brave / other) Auto-PiP Toggles -->
+    <div id="nonNativePipContainer" style="display: none;">
+      <label class="row">
+        <div class="item-info">
+          <span class="label">Auto PiP</span>
+          <span class="sublabel">Float video on tab / window switch</span>
+        </div>
+        <input type="checkbox" id="autoPip">
+        <span class="switch"></span>
+      </label>
 
-    <div id="autoPipFlagRow" class="sub-helper-row">
-      <span class="sub-helper-text">Alt+Tab / Window PiP:</span>
-      <a href="#" id="openFlagLink" class="flag-link" title="Open Chrome's native flag for Alt+Tab Auto-PiP">Enable Flag ↗</a>
+      <label class="row" id="pipOnMinimizeRow">
+        <div class="item-info">
+          <span class="label">PiP on window minimize</span>
+          <span class="sublabel">Float when browser is minimized</span>
+        </div>
+        <input type="checkbox" id="pipOnMinimize" checked>
+        <span class="switch"></span>
+      </label>
+    </div>
+
+    <!-- Helium & Chromium Native Auto-PiP Guide Card -->
+    <div id="nativePipContainer" class="native-pip-card" style="display: none;">
+      <div class="native-card-header">
+        <span class="native-title">Auto Picture-in-Picture</span>
+        <span class="native-badge">Built-in</span>
+      </div>
+      <div class="native-card-desc">
+        Helium & Chromium natively float YouTube when switching tabs or minimizing. Required setup:
+      </div>
+      <div class="native-steps">
+        <div class="native-step-row">
+          <span class="native-step-num">1</span>
+          <span class="native-step-text">Browser flag:</span>
+          <a href="#" id="openFlagLink" class="native-link" title="Open native flags for Auto-PiP">Flags ↗</a>
+        </div>
+        <div class="native-step-row">
+          <span class="native-step-num">2</span>
+          <span class="native-step-text">Site permission:</span>
+          <a href="#" id="openPermLink" class="native-link" title="Set Automatic picture-in-picture to Allow for YouTube">Allow PiP ↗</a>
+        </div>
+      </div>
     </div>
 
     <div id="statusBanner" class="status-banner"></div>

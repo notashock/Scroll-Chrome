@@ -29,7 +29,8 @@
     stickyPlayer: false,
     hideScrollbars: true,
     hideShorts: true,
-    autoPip: false,
+    autoPip: true,
+    pipOnMinimize: true,
     fullAmbient: false,
     pipShortcut: DEFAULT_PIP_SHORTCUT,
   };
@@ -81,35 +82,37 @@
     } catch (_) {}
   }
 
-  /* ── CSS Class Toggling ───────────────────────────────────────────── */
-
   function applyClasses() {
     const root = document.documentElement;
+    if (!root) return;
     root.classList.toggle("yt-split-scroll", currentSettings.enabled);
     root.classList.toggle(
       "yt-split-scroll-sticky-player",
-      currentSettings.enabled && currentSettings.stickyPlayer
+      Boolean(currentSettings.enabled && currentSettings.stickyPlayer)
     );
     root.classList.toggle(
       "yt-split-scroll-hide-scrollbars",
-      currentSettings.enabled && currentSettings.hideScrollbars
+      Boolean(currentSettings.enabled && (currentSettings.hideScrollbars !== false))
     );
     root.classList.toggle(
       "yt-split-scroll-hide-shorts",
-      currentSettings.enabled && currentSettings.hideShorts
+      Boolean(currentSettings.enabled && currentSettings.hideShorts)
     );
     root.classList.toggle(
       "yt-split-scroll-auto-pip",
-      currentSettings.enabled && currentSettings.autoPip
+      Boolean(currentSettings.enabled && currentSettings.autoPip)
     );
     root.classList.toggle(
       "yt-split-scroll-full-ambient",
-      currentSettings.enabled && currentSettings.fullAmbient
+      Boolean(currentSettings.enabled && currentSettings.fullAmbient)
     );
 
     syncAutoPipState();
     syncAmbientState();
   }
+
+  // Instant zero-flicker application at document_start
+  applyClasses();
 
   /* ── Infinite Scroll Sentinel Watcher (Prioritizes Video Playback) ── */
 
@@ -218,7 +221,9 @@
 
       if (currentSettings.enabled && currentSettings.autoPip) {
         video.autoPictureInPicture = true;
-        video.setAttribute("autopictureinpicture", "true");
+        if (!video.hasAttribute("autopictureinpicture")) {
+          video.setAttribute("autopictureinpicture", "");
+        }
       } else {
         video.autoPictureInPicture = false;
         video.removeAttribute("autopictureinpicture");
@@ -227,22 +232,43 @@
       if (!video._splitScrollTracked) {
         video._splitScrollTracked = true;
         video.addEventListener("enterpictureinpicture", () => {
+          if (returnDebounceTimer) {
+            clearTimeout(returnDebounceTimer);
+            returnDebounceTimer = null;
+          }
           safeSendMessage({ action: "pip-started" });
         });
         video.addEventListener("leavepictureinpicture", () => {
+          if (returnDebounceTimer) {
+            clearTimeout(returnDebounceTimer);
+            returnDebounceTimer = null;
+          }
           safeSendMessage({ action: "pip-stopped" });
+          setTimeout(() => {
+            setupAutoPip();
+            window.dispatchEvent(new CustomEvent("yt-deck-rearm-pip"));
+          }, 50);
         });
       }
     } catch (_) {}
   }
 
-  // Observer that strips disablepictureinpicture if YouTube dynamically re-applies it
+  // Observer that strips disablepictureinpicture and guarantees autopictureinpicture
   const pipAttributeObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
-      if (m.type === "attributes" && m.attributeName === "disablepictureinpicture") {
-        if (m.target instanceof HTMLVideoElement && m.target.hasAttribute("disablepictureinpicture")) {
-          m.target.removeAttribute("disablepictureinpicture");
-          m.target.disablePictureInPicture = false;
+      if (m.type === "attributes") {
+        if (m.attributeName === "disablepictureinpicture") {
+          if (m.target instanceof HTMLVideoElement && m.target.hasAttribute("disablepictureinpicture")) {
+            m.target.removeAttribute("disablepictureinpicture");
+            m.target.disablePictureInPicture = false;
+          }
+        } else if (m.attributeName === "autopictureinpicture") {
+          if (m.target instanceof HTMLVideoElement && currentSettings.enabled && currentSettings.autoPip) {
+            if (!m.target.hasAttribute("autopictureinpicture")) {
+              m.target.setAttribute("autopictureinpicture", "");
+              m.target.autoPictureInPicture = true;
+            }
+          }
         }
       }
     }
@@ -262,7 +288,7 @@
       try {
         pipAttributeObserver.observe(video, {
           attributes: true,
-          attributeFilter: ["disablepictureinpicture"],
+          attributeFilter: ["disablepictureinpicture", "autopictureinpicture"],
         });
       } catch (_) {}
     }
@@ -275,6 +301,7 @@
 
     if (returnDebounceTimer) {
       clearTimeout(returnDebounceTimer);
+      returnDebounceTimer = null;
     }
 
     // Delay 250ms so Windows DWM unminimize animation finishes and DirectX surface is composited
@@ -287,16 +314,22 @@
           await document.exitPictureInPicture();
         } catch (_) {}
       }
+
+      setupAutoPip();
+      window.dispatchEvent(new CustomEvent("yt-deck-rearm-pip"));
     }, 250);
   }
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       handleTabReturn();
-    } else {
+    } else if (document.visibilityState === "hidden") {
       if (returnDebounceTimer) {
         clearTimeout(returnDebounceTimer);
         returnDebounceTimer = null;
+      }
+      if (currentSettings.enabled && currentSettings.autoPip) {
+        window.dispatchEvent(new CustomEvent("yt-deck-trigger-pip"));
       }
     }
   });
@@ -304,6 +337,13 @@
   window.addEventListener("focus", () => {
     if (document.visibilityState === "visible") {
       handleTabReturn();
+    }
+  });
+
+  window.addEventListener("blur", () => {
+    if (returnDebounceTimer) {
+      clearTimeout(returnDebounceTimer);
+      returnDebounceTimer = null;
     }
   });
 
@@ -339,6 +379,10 @@
   document.addEventListener(
     "enterpictureinpicture",
     () => {
+      if (returnDebounceTimer) {
+        clearTimeout(returnDebounceTimer);
+        returnDebounceTimer = null;
+      }
       safeSendMessage({ action: "pip-started" });
     },
     true
@@ -347,7 +391,15 @@
   document.addEventListener(
     "leavepictureinpicture",
     () => {
+      if (returnDebounceTimer) {
+        clearTimeout(returnDebounceTimer);
+        returnDebounceTimer = null;
+      }
       safeSendMessage({ action: "pip-stopped" });
+      setTimeout(() => {
+        setupAutoPip();
+        window.dispatchEvent(new CustomEvent("yt-deck-rearm-pip"));
+      }, 50);
     },
     true
   );
@@ -377,15 +429,9 @@
       return;
     }
 
-    if (message.action === "window-defocused") {
+    if (message.action === "enter-pip" || message.action === "window-defocused") {
       if (currentSettings.enabled && currentSettings.autoPip) {
-        const video = findVideoElement();
-        if (video && !video.paused && !video.ended && !document.pictureInPictureElement) {
-          try {
-            unlockVideoPip(video);
-            video.requestPictureInPicture().catch(() => {});
-          } catch (_) {}
-        }
+        window.dispatchEvent(new CustomEvent("yt-deck-trigger-pip"));
       }
       sendResponse({ received: true });
       return;
@@ -553,34 +599,88 @@
     syncMiniplayerState();
   }
 
+  /* ── Dedicated In-Player PiP Button ───────────────────────────────── */
+
+  function setupPlayerPipButton() {
+    try {
+      if (!isWatchPage()) return;
+      const rightControls = document.querySelector(".ytp-right-controls");
+      if (!rightControls) return;
+
+      if (rightControls.querySelector(".ytp-deck-pip-button")) return;
+
+      const pipBtn = document.createElement("button");
+      pipBtn.className = "ytp-button ytp-deck-pip-button";
+      pipBtn.setAttribute("aria-label", "Picture-in-Picture (Alt+P or Ctrl+Shift+8)");
+      pipBtn.setAttribute("title", "Picture-in-Picture (Alt+P / Ctrl+Shift+8)");
+      pipBtn.setAttribute("data-tooltip-target-id", "ytp-deck-pip-button");
+      pipBtn.style.verticalAlign = "top";
+      pipBtn.innerHTML = `
+        <svg height="100%" version="1.1" viewBox="0 0 36 36" width="100%" style="pointer-events:none; padding: 6px;">
+          <path d="M25,17 L17,17 L17,23 L25,23 L25,17 Z M29,25 L29,11 C29,9.9 28.1,9 27,9 L9,9 C7.9,9 7,9.9 7,11 L7,25 C7,26.1 7.9,27 9,27 L27,27 C28.1,27 29,26.1 29,25 Z M27,25 L9,25 L9,11 L27,11 L27,25 Z" fill="#fff"></path>
+        </svg>
+      `;
+
+      pipBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        togglePictureInPicture();
+      });
+
+      const targetRef =
+        rightControls.querySelector(".ytp-miniplayer-button") ||
+        rightControls.querySelector(".ytp-size-button") ||
+        rightControls.firstElementChild;
+
+      if (targetRef && targetRef.parentElement === rightControls) {
+        rightControls.insertBefore(pipBtn, targetRef);
+      } else if (targetRef && targetRef.parentElement) {
+        targetRef.parentElement.insertBefore(pipBtn, targetRef);
+      } else {
+        rightControls.appendChild(pipBtn);
+      }
+    } catch (_) {}
+  }
+
   /* ── Initialization ───────────────────────────────────────────────── */
+
+  let initRaf = null;
 
   function init() {
     applyClasses();
-    setupMiniplayerObserver();
 
     if (!isWatchPage()) {
       cleanupWatchPage();
       return;
     }
 
-    setupAutoPip();
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init, { once: true });
+      return;
+    }
 
-    setTimeout(() => {
-      if (isWatchPage()) {
-        setupContinuationObserver();
-        setupMutationWatcher();
-        setupAutoPip();
-      }
-    }, 600);
+    setupMiniplayerObserver();
+    setupAutoPip();
+    setupPlayerPipButton();
+    setupContinuationObserver();
+    setupMutationWatcher();
   }
 
-  // Load initial settings
+  function scheduleInit() {
+    if (initRaf) cancelAnimationFrame(initRaf);
+    initRaf = requestAnimationFrame(() => {
+      initRaf = null;
+      init();
+    });
+  }
+
+  // Load initial settings and update classes immediately
   try {
     chrome.storage.local
       .get(DEFAULTS)
       .then((result) => {
         currentSettings = { ...DEFAULTS, ...result };
+        applyClasses();
         init();
       })
       .catch(() => {
@@ -596,9 +696,8 @@
     }
   });
 
-  document.addEventListener("yt-navigate-finish", () => {
-    init();
-  });
+  document.addEventListener("yt-navigate-finish", scheduleInit);
+  document.addEventListener("yt-page-data-updated", scheduleInit);
 
   /* ── Real-Time Storage Listener ──────────────────────────────────── */
 
@@ -620,6 +719,9 @@
       }
       if (changes.autoPip !== undefined) {
         currentSettings.autoPip = changes.autoPip.newValue ?? DEFAULTS.autoPip;
+      }
+      if (changes.pipOnMinimize !== undefined) {
+        currentSettings.pipOnMinimize = changes.pipOnMinimize.newValue ?? DEFAULTS.pipOnMinimize;
       }
       if (changes.fullAmbient !== undefined) {
         currentSettings.fullAmbient = changes.fullAmbient.newValue ?? DEFAULTS.fullAmbient;
