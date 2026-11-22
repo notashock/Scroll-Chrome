@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "TubeDeck",
   "version": "0.4.0",
-  "description": "Independent dual-column scrolling, sticky player, Shorts cleaner, and seamless Auto Picture-in-Picture for YouTube.",
+  "description": "Independent dual-column scrolling, ambient glow, Shorts cleaner, and seamless Auto Picture-in-Picture for YouTube.",
 
-  "permissions": ["storage", "tabs"],
+  "permissions": ["storage"],
   "host_permissions": ["*://*.youtube.com/*"],
 
   "background": {

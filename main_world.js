@@ -116,6 +116,7 @@
   }
 
   function ensureCinematicsEnabled() {
+    // Only force cinematics on when the user opted into Full ambient; otherwise respect YouTube's own Ambient setting.
     if (!isFullAmbientActive()) return;
 
     try {
@@ -125,6 +126,16 @@
 
       if (player && typeof player.setOption === "function") {
         player.setOption("cinematics", "enabled", true);
+      }
+
+      // Optimize cinematics canvas layers for GPU compositor
+      const canvases = document.querySelectorAll("#cinematics canvas");
+      for (const c of canvases) {
+        if (!c._deckOptimized) {
+          c._deckOptimized = true;
+          c.style.willChange = "opacity";
+          c.style.backfaceVisibility = "hidden";
+        }
       }
     } catch (_) {}
   }
@@ -144,20 +155,6 @@
       video.addEventListener("playing", () => unlockVideo(video), { passive: true });
       video.addEventListener("loadedmetadata", () => unlockVideo(video), { passive: true });
       video.addEventListener("canplay", () => unlockVideo(video), { passive: true });
-      video.addEventListener(
-        "timeupdate",
-        () => {
-          const now = Date.now();
-          if (now - lastHookCheck > 2500) {
-            lastHookCheck = now;
-            if (isAutoPipActive()) {
-              unlockVideo(video);
-              registerMediaSession();
-            }
-          }
-        },
-        { passive: true }
-      );
     }
   }
 
@@ -191,35 +188,45 @@
     refreshPipState();
   });
 
-  // Watch for dynamic video element insertion from YouTube's player engine
-  const domVideoObserver = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      for (const node of m.addedNodes) {
-        if (node.nodeType !== Node.ELEMENT_NODE) continue;
-        if (node.nodeName === "VIDEO") {
-          unlockVideo(node);
-          hookVideoEvents();
-        } else if (node.firstElementChild) {
-          const v = node.querySelector("video");
-          if (v) {
-            unlockVideo(v);
-            hookVideoEvents();
-          }
+  // Watch for dynamic video element insertion scoped strictly to the player host
+  let playerObserver = null;
+  function setupPlayerObserver() {
+    const video = findMainVideo();
+    if (video) {
+      unlockVideo(video);
+      hookVideoEvents();
+      return;
+    }
+
+    if (playerObserver) return;
+    const playerTarget =
+      document.getElementById("movie_player") ||
+      document.querySelector("ytd-watch-flexy") ||
+      document.getElementById("page-manager");
+
+    if (!playerTarget) return;
+
+    playerObserver = new MutationObserver(() => {
+      const v = findMainVideo();
+      if (v) {
+        unlockVideo(v);
+        hookVideoEvents();
+        if (playerObserver) {
+          playerObserver.disconnect();
+          playerObserver = null;
         }
       }
-    }
-  });
+    });
 
-  const attachObserver = () => {
-    if (document.body) {
-      domVideoObserver.observe(document.body, { childList: true, subtree: true });
-    }
-  };
+    try {
+      playerObserver.observe(playerTarget, { childList: true, subtree: true });
+    } catch (_) {}
+  }
 
-  if (document.body) {
-    attachObserver();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", setupPlayerObserver, { once: true });
   } else {
-    document.addEventListener("DOMContentLoaded", attachObserver, { once: true });
+    setupPlayerObserver();
   }
 
   // React to attribute changes from content script
@@ -241,12 +248,16 @@
       registerMediaSession();
       ensureCinematicsEnabled();
       hookVideoEvents();
-    }, 400);
+      setupPlayerObserver();
+    }, 200);
   });
 
-  // Handle Alt+Tab / Window Blur safely from main execution context
-  window.addEventListener("blur", () => {
-    triggerSafePiP("window-blur");
+  // No window "blur" trigger: it also fires on address bar, popup, DevTools and live-chat iframe clicks.
+  // Alt+Tab is handled by background.js (windows.onFocusChanged → WINDOW_ID_NONE), which honors pipOnMinimize.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      triggerSafePiP("window-hidden");
+    }
   });
 
   // Listen for logo click request from content script to trigger native miniplayer

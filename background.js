@@ -83,13 +83,31 @@ async function setPipInfo(tabId, windowId) {
   } catch {}
 }
 
-async function getPipTabId() {
-  const info = await getPipInfo();
-  return info.tabId;
+// Last focused YouTube tab, kept in session storage: the MV3 worker is killed after ~30s idle,
+// so plain variables are empty again exactly when the user switches away from a video.
+async function getYtActive() {
+  try {
+    const data = await chrome.storage.session.get(["ytTabId", "ytWindowId"]);
+    return { tabId: data.ytTabId || null, windowId: data.ytWindowId || null };
+  } catch {
+    return { tabId: null, windowId: null };
+  }
 }
 
-async function setPipTabId(tabId) {
-  await setPipInfo(tabId, null);
+async function setYtActive(tabId, windowId) {
+  try {
+    if (tabId) {
+      await chrome.storage.session.set({ ytTabId: tabId, ytWindowId: windowId || null });
+    } else {
+      await chrome.storage.session.remove(["ytTabId", "ytWindowId"]);
+    }
+  } catch {}
+}
+
+// Real youtube.com host only (not e.g. a search URL that merely contains "youtube.com").
+// Without the "tabs" permission, Chrome only exposes tab.url for hosts we have access to anyway.
+function isYouTubeUrl(url) {
+  return /^https?:\/\/([a-z0-9-]+\.)*youtube\.com\//i.test(url || "");
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -105,39 +123,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "pip-started" && sender.tab?.id) {
     setPipInfo(sender.tab.id, sender.tab.windowId || null);
-    currentActiveYouTubeTabId = sender.tab.id;
-    if (sender.tab.windowId) {
-      currentActiveYouTubeWindowId = sender.tab.windowId;
-    }
+    setYtActive(sender.tab.id, sender.tab.windowId);
     sendResponse({ received: true });
   } else if (message.action === "pip-stopped") {
     setPipInfo(null, null);
-    // Retain currentActiveYouTubeTabId and currentActiveYouTubeWindowId so subsequent Alt+Tab / focus changes still trigger
-    if (sender.tab?.id && sender.tab.url && sender.tab.url.includes("youtube.com")) {
-      currentActiveYouTubeTabId = sender.tab.id;
-      if (sender.tab.windowId) {
-        currentActiveYouTubeWindowId = sender.tab.windowId;
-      }
+    // Keep tracking this tab so later Alt+Tab / focus changes still trigger
+    if (sender.tab?.id && isYouTubeUrl(sender.tab.url)) {
+      setYtActive(sender.tab.id, sender.tab.windowId);
     }
     sendResponse({ received: true });
-  } else if (message.action === "sync-shortcuts") {
-    syncCommandShortcuts().then(() => sendResponse({ synced: true }));
-    return true;
-  } else if (message.action === "open-shortcuts-page") {
-    try {
-      chrome.tabs.create({ url: "chrome://extensions/shortcuts" });
-      sendResponse({ opened: true });
-    } catch (_) {
-      sendResponse({ opened: false });
-    }
-  } else if (message.action === "open-flags-page") {
-    try {
-      const flagUrl = message.url || "chrome://flags/#auto-picture-in-picture-for-video-playback";
-      chrome.tabs.create({ url: flagUrl });
-      sendResponse({ opened: true });
-    } catch (_) {
-      sendResponse({ opened: false });
-    }
   }
 });
 
@@ -146,41 +140,15 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   if (currentPipTabId === tabId) {
     await setPipInfo(null, null);
   }
-  if (lastActiveTabId === tabId) {
-    lastActiveTabId = null;
+  const { tabId: ytTabId } = await getYtActive();
+  if (ytTabId === tabId) {
+    await setYtActive(null, null);
   }
 });
 
 /* ── Tab Switch Listener for Auto-PiP ────────────────────────────── */
-
-let lastActiveTabId = null;
-let currentActiveYouTubeTabId = null;
-let currentActiveYouTubeWindowId = null;
-
-async function initActiveTabTracking() {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (tab?.id) {
-      lastActiveTabId = tab.id;
-      if (tab.url && tab.url.includes("youtube.com")) {
-        currentActiveYouTubeTabId = tab.id;
-        currentActiveYouTubeWindowId = tab.windowId;
-      }
-    }
-  } catch (_) {}
-}
-
-initActiveTabTracking();
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (tab && tab.active) {
-    lastActiveTabId = tabId;
-    if (tab.url && tab.url.includes("youtube.com")) {
-      currentActiveYouTubeTabId = tabId;
-      currentActiveYouTubeWindowId = tab.windowId;
-    }
-  }
-});
+// Entering PiP when leaving a tab is done in content.js (visibilitychange → hidden), which needs
+// no tracking here. This listener only restores the video and records the active YouTube tab.
 
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
@@ -188,42 +156,22 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
       enabled: true,
       autoPip: true,
     });
-    if (!data.enabled || !data.autoPip) {
-      lastActiveTabId = activeInfo.tabId;
-      return;
-    }
+    if (!data.enabled || !data.autoPip) return;
 
+    // If returning to the YouTube tab with active PiP, restore video inside the tab
     const { tabId: currentPipTabId } = await getPipInfo();
-
-    // 1. If returning to the YouTube tab with active PiP, restore video inside the tab
     if (currentPipTabId && activeInfo.tabId === currentPipTabId) {
       chrome.tabs.sendMessage(currentPipTabId, { action: "window-focused" }).catch(() => {});
     }
 
-    // 2. If leaving a YouTube tab, tell the previously active tab to enter PiP
-    if (lastActiveTabId && lastActiveTabId !== activeInfo.tabId) {
-      try {
-        const prevTab = await chrome.tabs.get(lastActiveTabId);
-        if (prevTab?.id && prevTab.url && prevTab.url.includes("youtube.com")) {
-          chrome.tabs.sendMessage(prevTab.id, {
-            action: "enter-pip",
-            reason: "tab-switch",
-          }).catch(() => {});
-        }
-      } catch (_) {}
+    const activeTab = await chrome.tabs.get(activeInfo.tabId);
+    if (isYouTubeUrl(activeTab?.url)) {
+      await setYtActive(activeTab.id, activeTab.windowId);
+    } else {
+      // Only forget the YouTube tab if it lived in this window; another window may still show it
+      const yt = await getYtActive();
+      if (yt.windowId === activeInfo.windowId) await setYtActive(null, null);
     }
-
-    lastActiveTabId = activeInfo.tabId;
-
-    try {
-      const activeTab = await chrome.tabs.get(activeInfo.tabId);
-      if (activeTab?.url && activeTab.url.includes("youtube.com")) {
-        currentActiveYouTubeTabId = activeTab.id;
-        currentActiveYouTubeWindowId = activeTab.windowId;
-      } else {
-        currentActiveYouTubeTabId = null;
-      }
-    } catch (_) {}
   } catch (_) {}
 });
 
@@ -239,17 +187,22 @@ chrome.windows.onBoundsChanged.addListener(async (win) => {
     if (!data.enabled || !data.autoPip || !data.pipOnMinimize) return;
 
     if (win && win.state === "minimized") {
-      const [tab] = await chrome.tabs.query({ active: true, windowId: win.id });
-      if (tab?.id && tab.url && tab.url.includes("youtube.com")) {
-        chrome.tabs.sendMessage(tab.id, {
-          action: "enter-pip",
-          reason: "minimized",
-        }).catch(() => {});
+      const tabs = await chrome.tabs.query({ windowId: win.id });
+      for (const tab of tabs) {
+        if (tab.active && tab.id && isYouTubeUrl(tab.url)) {
+          chrome.tabs.sendMessage(tab.id, {
+            action: "enter-pip",
+            reason: "window-minimized",
+          }).catch(() => {});
+        }
       }
     } else if (win && (win.state === "normal" || win.state === "maximized")) {
-      const { tabId: currentPipTabId, windowId: currentPipWindowId } = await getPipInfo();
-      if (currentPipTabId && currentPipWindowId && win.id === currentPipWindowId) {
-        chrome.tabs.sendMessage(currentPipTabId, { action: "window-focused" }).catch(() => {});
+      // Only signal window-focused if this window is currently focused
+      if (win.focused) {
+        const { tabId: currentPipTabId, windowId: currentPipWindowId } = await getPipInfo();
+        if (currentPipTabId && currentPipWindowId && win.id === currentPipWindowId) {
+          chrome.tabs.sendMessage(currentPipTabId, { action: "window-focused" }).catch(() => {});
+        }
       }
     }
   } catch (_) {}
@@ -264,44 +217,81 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
     });
     if (!data.enabled || !data.autoPip) return;
 
+    const yt = await getYtActive();
+
     if (windowId !== chrome.windows.WINDOW_ID_NONE) {
-      // 1. If switching away from an active YouTube window to another browser window:
-      if (
-        data.pipOnMinimize &&
-        currentActiveYouTubeWindowId &&
-        windowId !== currentActiveYouTubeWindowId &&
-        currentActiveYouTubeTabId
-      ) {
-        chrome.tabs.sendMessage(currentActiveYouTubeTabId, {
+      // 1. Check all windows to see if any YouTube window is currently minimized
+      if (data.pipOnMinimize) {
+        try {
+          const allWindows = await chrome.windows.getAll();
+          for (const w of allWindows) {
+            if (w.state === "minimized") {
+              const tabs = await chrome.tabs.query({ windowId: w.id });
+              for (const tab of tabs) {
+                if (tab.active && tab.id && isYouTubeUrl(tab.url)) {
+                  chrome.tabs.sendMessage(tab.id, {
+                    action: "enter-pip",
+                    reason: "window-minimized",
+                  }).catch(() => {});
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. If switching away from an active YouTube window to another browser window:
+      if (data.pipOnMinimize && yt.tabId && yt.windowId && windowId !== yt.windowId) {
+        chrome.tabs.sendMessage(yt.tabId, {
           action: "enter-pip",
           reason: "window-switched",
         }).catch(() => {});
       }
 
-      // 2. Query and update tracking for the newly focused window:
+      // 3. Query and update tracking for the newly focused window:
       try {
         const [activeTab] = await chrome.tabs.query({ active: true, windowId });
-        if (activeTab?.id) {
-          lastActiveTabId = activeTab.id;
-          if (activeTab.url && activeTab.url.includes("youtube.com")) {
-            currentActiveYouTubeTabId = activeTab.id;
-            currentActiveYouTubeWindowId = windowId;
-          }
+        if (activeTab?.id && isYouTubeUrl(activeTab.url)) {
+          await setYtActive(activeTab.id, windowId);
         }
       } catch (_) {}
 
-      // 3. Returning focus to the browser window with YouTube that had PiP open:
+      // 4. Returning focus to the browser window with YouTube that had PiP open:
       const { tabId: currentPipTabId, windowId: currentPipWindowId } = await getPipInfo();
       if (currentPipTabId && currentPipWindowId && windowId === currentPipWindowId) {
-        chrome.tabs.sendMessage(currentPipTabId, { action: "window-focused" }).catch(() => {});
+        try {
+          const targetWin = await chrome.windows.get(windowId);
+          if (targetWin && targetWin.state !== "minimized") {
+            chrome.tabs.sendMessage(currentPipTabId, { action: "window-focused" }).catch(() => {});
+          }
+        } catch (_) {
+          chrome.tabs.sendMessage(currentPipTabId, { action: "window-focused" }).catch(() => {});
+        }
       }
       return;
     }
 
-    // 4. Alt+Tab or defocusing away from all browser windows (windowId === WINDOW_ID_NONE):
+    // 5. Defocusing / Alt-Tab / Minimize all windows (windowId === WINDOW_ID_NONE):
     if (data.pipOnMinimize) {
-      if (currentActiveYouTubeTabId) {
-        chrome.tabs.sendMessage(currentActiveYouTubeTabId, {
+      try {
+        const allWindows = await chrome.windows.getAll();
+        for (const w of allWindows) {
+          if (w.state === "minimized") {
+            const tabs = await chrome.tabs.query({ windowId: w.id });
+            for (const tab of tabs) {
+              if (tab.active && tab.id && isYouTubeUrl(tab.url)) {
+                chrome.tabs.sendMessage(tab.id, {
+                  action: "enter-pip",
+                  reason: "window-minimized",
+                }).catch(() => {});
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      if (yt.tabId) {
+        chrome.tabs.sendMessage(yt.tabId, {
           action: "enter-pip",
           reason: "alt-tab-defocused",
         }).catch(() => {});
@@ -330,16 +320,16 @@ chrome.commands.onCommand.addListener(async (command) => {
   syncCommandShortcuts();
 
   // 1. If we have a cached PiP tab, ask it to exit PiP
-  const trackedTabId = await getPipTabId();
+  const { tabId: trackedTabId } = await getPipInfo();
   if (trackedTabId) {
     try {
       const response = await chrome.tabs.sendMessage(trackedTabId, { action: "exit-pip" });
       if (response?.exited) {
-        await setPipTabId(null);
+        await setPipInfo(null, null);
         return;
       }
     } catch {
-      await setPipTabId(null);
+      await setPipInfo(null, null);
     }
   }
 
@@ -353,7 +343,7 @@ chrome.commands.onCommand.addListener(async (command) => {
         const response = await chrome.tabs.sendMessage(tab.id, { action: "exit-pip" });
         if (response?.exited) {
           closedAny = true;
-          await setPipTabId(null);
+          await setPipInfo(null, null);
           return;
         }
       } catch {}
@@ -365,7 +355,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   // 3. If no tab had PiP open, user wanted to open PiP on the currently active YouTube tab
   try {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (activeTab?.id && activeTab.url?.includes("youtube.com")) {
+    if (activeTab?.id && isYouTubeUrl(activeTab.url)) {
       chrome.tabs.sendMessage(activeTab.id, { action: "toggle-pip" }).catch(() => {});
     }
   } catch {}

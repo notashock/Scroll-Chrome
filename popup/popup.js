@@ -10,8 +10,6 @@
 
   const DEFAULTS = {
     enabled: true,
-    stickyPlayer: false,
-    hideScrollbars: true,
     hideShorts: true,
     autoPip: true,
     pipOnMinimize: true,
@@ -64,14 +62,10 @@
 
   /* ── Configure Browser-Specific Auto-PiP Presentation ─────────────── */
 
-  if (isBrave) {
-    if (nonNativePipContainer) nonNativePipContainer.style.display = "block";
-    if (nativePipContainer) nativePipContainer.style.display = "none";
-  } else {
-    // Built-in native Auto-PiP browser (Helium, Chrome, Edge, ungoogled-chromium)
-    if (nonNativePipContainer) nonNativePipContainer.style.display = "none";
-    if (nativePipContainer) nativePipContainer.style.display = "flex";
-  }
+  // The on/off switches show in every browser: the extension's own PiP triggers run everywhere.
+  if (nonNativePipContainer) nonNativePipContainer.style.display = "block";
+  // Native setup guide (flag + site permission) only on browsers with built-in Auto-PiP (Chrome, Edge, Helium)
+  if (nativePipContainer) nativePipContainer.style.display = isBrave ? "none" : "flex";
 
   /* ── Load initial settings ────────────────────────────────────────── */
 
@@ -83,12 +77,6 @@
 
       if (autoPipEl) autoPipEl.checked = settings.autoPip ?? DEFAULTS.autoPip;
       if (pipOnMinimizeEl) pipOnMinimizeEl.checked = settings.pipOnMinimize ?? DEFAULTS.pipOnMinimize;
-
-      // Ensure hideScrollbars is true and stickyPlayer is false by default
-      const updates = {};
-      if (settings.hideScrollbars === undefined) updates.hideScrollbars = true;
-      if (settings.stickyPlayer !== false) updates.stickyPlayer = false;
-      if (Object.keys(updates).length > 0) safeSetStorage(updates);
 
       if (pipOnMinimizeRow && autoPipEl) {
         pipOnMinimizeRow.style.display = autoPipEl.checked ? "flex" : "none";

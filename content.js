@@ -26,8 +26,6 @@
 
   const DEFAULTS = {
     enabled: true,
-    stickyPlayer: false,
-    hideScrollbars: true,
     hideShorts: true,
     autoPip: true,
     pipOnMinimize: true,
@@ -82,18 +80,47 @@
     } catch (_) {}
   }
 
+  /* ── Adaptive UI State Sync (Live Chat, Playlists & Queues) ───────── */
+
+  function syncAdaptiveUIState() {
+    try {
+      const root = document.documentElement;
+      if (!root) return;
+
+      if (!currentSettings.enabled || !isWatchPage()) {
+        root.removeAttribute("data-yt-deck-chat");
+        root.removeAttribute("data-yt-deck-playlist");
+        root.removeAttribute("data-yt-deck-queue");
+        return;
+      }
+
+      // 1. Live Chat detection (active when chat is uncollapsed and present in DOM)
+      const chatEl = document.querySelector("#chat:not([collapsed]), ytd-live-chat-frame:not([collapsed])");
+      const isChatActive = Boolean(chatEl && chatEl.offsetHeight > 0);
+      root.setAttribute("data-yt-deck-chat", isChatActive ? "active" : "inactive");
+
+      // 2. Playlist & Queue detection
+      const playlistEl = document.querySelector("ytd-playlist-panel-renderer, #playlist");
+      const isPlaylistActive = Boolean(playlistEl && playlistEl.offsetHeight > 0);
+      root.setAttribute("data-yt-deck-playlist", isPlaylistActive ? "active" : "inactive");
+
+      const isQueue = Boolean(
+        isPlaylistActive && (
+          playlistEl.getAttribute("playlist-type") === "queue" ||
+          playlistEl.hasAttribute("queue") ||
+          playlistEl.querySelector("#header-description")?.textContent?.toLowerCase()?.includes("queue") ||
+          playlistEl.querySelector(".header-description")?.textContent?.toLowerCase()?.includes("queue")
+        )
+      );
+      root.setAttribute("data-yt-deck-queue", isQueue ? "active" : "inactive");
+    } catch (_) {}
+  }
+
   function applyClasses() {
     const root = document.documentElement;
     if (!root) return;
     root.classList.toggle("yt-split-scroll", currentSettings.enabled);
-    root.classList.toggle(
-      "yt-split-scroll-sticky-player",
-      Boolean(currentSettings.enabled && currentSettings.stickyPlayer)
-    );
-    root.classList.toggle(
-      "yt-split-scroll-hide-scrollbars",
-      Boolean(currentSettings.enabled && (currentSettings.hideScrollbars !== false))
-    );
+    root.classList.toggle("yt-deck-watch", Boolean(currentSettings.enabled && isWatchPage()));
     root.classList.toggle(
       "yt-split-scroll-hide-shorts",
       Boolean(currentSettings.enabled && currentSettings.hideShorts)
@@ -109,10 +136,33 @@
 
     syncAutoPipState();
     syncAmbientState();
+    syncAdaptiveUIState();
   }
 
   // Instant zero-flicker application at document_start
   applyClasses();
+
+  /* ── Video Detection & Attribute Management ──────────────────────── */
+
+  function findVideoElement() {
+    const mainVideo =
+      document.querySelector("#movie_player video") ||
+      document.querySelector("ytd-watch-flexy video.html5-main-video") ||
+      document.querySelector("video.html5-main-video");
+    if (mainVideo) return mainVideo;
+
+    const videos = Array.from(document.querySelectorAll("video"));
+    return videos.find((v) => v.offsetWidth > 0 && v.offsetHeight > 0) || videos[0] || null;
+  }
+
+  function isVideoPlaying() {
+    try {
+      const v = findVideoElement();
+      return Boolean(v && !v.paused && !v.ended && v.readyState >= 2);
+    } catch (_) {
+      return false;
+    }
+  }
 
   /* ── Infinite Scroll Sentinel Watcher (Prioritizes Video Playback) ── */
 
@@ -120,14 +170,16 @@
     if (!entry.isIntersecting) return;
 
     const now = Date.now();
-    if (now - lastSentinelTriggerTime < 1200) return; // Conservative 1.2s throttle to protect video decoding
+    // Throttle more conservatively when video is actively playing (1.8s vs 1.2s)
+    const minInterval = isVideoPlaying() ? 1800 : 1200;
+    if (now - lastSentinelTriggerTime < minInterval) return;
     lastSentinelTriggerTime = now;
 
     const el = entry.target;
-    // Defer suggestion loading to browser idle periods so video gets 100% GPU priority
+    // Defer suggestion loading strictly to browser idle periods so video gets 100% GPU priority
     const scheduleTask = typeof window.requestIdleCallback === "function"
-      ? (cb) => window.requestIdleCallback(cb, { timeout: 1000 })
-      : (cb) => setTimeout(cb, 60);
+      ? (cb) => window.requestIdleCallback(cb, { timeout: 1500 })
+      : (cb) => setTimeout(cb, 100);
 
     scheduleTask(() => {
       const btn = el.querySelector("button, tp-yt-paper-button, yt-button-renderer button");
@@ -170,7 +222,7 @@
     } catch (_) {}
   }
 
-  /* ── Mutation Watcher (Debounced via requestAnimationFrame) ───────── */
+  /* ── Mutation Watcher (Debounced via requestIdleCallback during playback) ── */
 
   function setupMutationWatcher() {
     if (mutationObs) {
@@ -186,31 +238,27 @@
     try {
       mutationObs = new MutationObserver(() => {
         if (mutationThrottleTimer) return;
-        mutationThrottleTimer = requestAnimationFrame(() => {
+
+        const updateSentinels = () => {
           mutationThrottleTimer = null;
+          syncAdaptiveUIState();
           if (!continuationObserver || !secondary) return;
           try {
             const sentinels = secondary.querySelectorAll("ytd-continuation-item-renderer");
             sentinels.forEach((el) => continuationObserver.observe(el));
           } catch (_) {}
-        });
+        };
+
+        // When video is playing, defer DOM querying to browser idle time to avoid 60fps render drops
+        if (isVideoPlaying() && typeof window.requestIdleCallback === "function") {
+          mutationThrottleTimer = window.requestIdleCallback(updateSentinels, { timeout: 1200 });
+        } else {
+          mutationThrottleTimer = requestAnimationFrame(updateSentinels);
+        }
       });
 
       mutationObs.observe(secondary, { childList: true, subtree: true });
     } catch (_) {}
-  }
-
-  /* ── Video Detection & Attribute Management ──────────────────────── */
-
-  function findVideoElement() {
-    const mainVideo =
-      document.querySelector("#movie_player video") ||
-      document.querySelector("ytd-watch-flexy video.html5-main-video") ||
-      document.querySelector("video.html5-main-video");
-    if (mainVideo) return mainVideo;
-
-    const videos = Array.from(document.querySelectorAll("video"));
-    return videos.find((v) => v.offsetWidth > 0 && v.offsetHeight > 0) || videos[0] || null;
   }
 
   function unlockVideoPip(video) {
@@ -228,28 +276,7 @@
         video.autoPictureInPicture = false;
         video.removeAttribute("autopictureinpicture");
       }
-
-      if (!video._splitScrollTracked) {
-        video._splitScrollTracked = true;
-        video.addEventListener("enterpictureinpicture", () => {
-          if (returnDebounceTimer) {
-            clearTimeout(returnDebounceTimer);
-            returnDebounceTimer = null;
-          }
-          safeSendMessage({ action: "pip-started" });
-        });
-        video.addEventListener("leavepictureinpicture", () => {
-          if (returnDebounceTimer) {
-            clearTimeout(returnDebounceTimer);
-            returnDebounceTimer = null;
-          }
-          safeSendMessage({ action: "pip-stopped" });
-          setTimeout(() => {
-            setupAutoPip();
-            window.dispatchEvent(new CustomEvent("yt-deck-rearm-pip"));
-          }, 50);
-        });
-      }
+      // PiP enter/leave events bubble, so the document-level listeners below handle every video
     } catch (_) {}
   }
 
@@ -298,6 +325,7 @@
 
   function handleTabReturn() {
     if (!currentSettings.enabled || !currentSettings.autoPip) return;
+    if (document.visibilityState !== "visible" || !document.hasFocus()) return;
 
     if (returnDebounceTimer) {
       clearTimeout(returnDebounceTimer);
@@ -307,7 +335,7 @@
     // Delay 250ms so Windows DWM unminimize animation finishes and DirectX surface is composited
     returnDebounceTimer = setTimeout(async () => {
       returnDebounceTimer = null;
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible" || !document.hasFocus()) return;
 
       if (document.pictureInPictureElement) {
         try {
@@ -322,20 +350,29 @@
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      handleTabReturn();
+      if (document.hasFocus()) {
+        handleTabReturn();
+      }
     } else if (document.visibilityState === "hidden") {
       if (returnDebounceTimer) {
         clearTimeout(returnDebounceTimer);
         returnDebounceTimer = null;
       }
-      if (currentSettings.enabled && currentSettings.autoPip) {
+      if (currentSettings.enabled && currentSettings.autoPip && currentSettings.pipOnMinimize !== false) {
         window.dispatchEvent(new CustomEvent("yt-deck-trigger-pip"));
+        if (!document.pictureInPictureElement) {
+          const video = findVideoElement();
+          if (video && !video.paused && !video.ended) {
+            unlockVideoPip(video);
+            video.requestPictureInPicture().catch(() => {});
+          }
+        }
       }
     }
   });
 
   window.addEventListener("focus", () => {
-    if (document.visibilityState === "visible") {
+    if (document.visibilityState === "visible" && document.hasFocus()) {
       handleTabReturn();
     }
   });
@@ -409,7 +446,7 @@
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message) return;
 
-    if (message.action === "exit-pip" || message.action === "exit-pip-if-active") {
+    if (message.action === "exit-pip") {
       if (returnDebounceTimer) {
         clearTimeout(returnDebounceTimer);
         returnDebounceTimer = null;
@@ -424,14 +461,27 @@
     }
 
     if (message.action === "window-focused") {
-      handleTabReturn();
+      if (document.visibilityState === "visible" && document.hasFocus()) {
+        handleTabReturn();
+      }
       sendResponse({ received: true });
       return;
     }
 
-    if (message.action === "enter-pip" || message.action === "window-defocused") {
+    if (message.action === "enter-pip") {
       if (currentSettings.enabled && currentSettings.autoPip) {
+        if (returnDebounceTimer) {
+          clearTimeout(returnDebounceTimer);
+          returnDebounceTimer = null;
+        }
         window.dispatchEvent(new CustomEvent("yt-deck-trigger-pip"));
+        if (!document.pictureInPictureElement) {
+          const video = findVideoElement();
+          if (video && !video.paused && !video.ended) {
+            unlockVideoPip(video);
+            video.requestPictureInPicture().catch(() => {});
+          }
+        }
       }
       sendResponse({ received: true });
       return;
@@ -498,9 +548,131 @@
 
   window.addEventListener("keydown", handleKeyDown, true);
 
+  /* ── Theater Glow (full-window ambient glow in theater mode) ──────── */
+
+  // YouTube's theater glow is boxed in and freezes in the light theme, so sample the video into an 8x5
+  // grid of averaged colours and let CSS stretch it. That few cells carries the scene's colours but no
+  // recognisable picture (a bigger grid read as a second video); bilinear upscaling is the blur.
+  // Each sample reads the whole video frame back from the GPU (1-2ms, with 30ms+ spikes on 1080p/4K),
+  // which stuttered playback at 8 samples/s. Like YouTube's own ambient, sample once per ~1.2s into
+  // one of two canvases and let the shared CSS opacity transition crossfade between them.
+  const GLOW_W = 8;
+  const GLOW_H = 5;
+  const GLOW_INTERVAL_MS = 1200;
+  let theaterGlow = null;
+  let theaterAttrObs = null;
+
+  function stopTheaterGlow() {
+    if (!theaterGlow) return;
+    const { video, handle, timer, el } = theaterGlow;
+    clearTimeout(timer);
+    try { video.cancelVideoFrameCallback(handle); } catch (_) {}
+    el.remove();
+    theaterGlow = null;
+  }
+
+  function syncTheaterGlow() {
+    const flexy = document.querySelector("ytd-watch-flexy");
+    // Full-window glow in both themes, like the default view. It lives in the flexy, not the theater
+    // box, because the box's size containment would trap a position: fixed child.
+    const host = flexy;
+    const video = findVideoElement();
+    const wanted = Boolean(
+      currentSettings.enabled && currentSettings.fullAmbient && isWatchPage() &&
+      host && video && typeof video.requestVideoFrameCallback === "function" &&
+      flexy.hasAttribute("theater") && !flexy.hasAttribute("fullscreen")
+    );
+    if (!wanted) return stopTheaterGlow();
+    if (theaterGlow && theaterGlow.video === video && theaterGlow.el.parentNode === host) return;
+
+    stopTheaterGlow();
+    // Wrapper carries the edge-fade ::after (a canvas can't have pseudo-elements)
+    const el = document.createElement("div");
+    el.id = "yt-deck-theater-glow";
+    const layers = [];
+    for (let i = 0; i < 2; i++) {
+      const canvas = document.createElement("canvas");
+      canvas.width = GLOW_W;
+      canvas.height = GLOW_H;
+      canvas.style.opacity = "0";
+      const ctx = canvas.getContext("2d", { alpha: false });
+      if (!ctx) return;
+      // Average the frame down (mipmapped) instead of point-sampling a few pixels, which flickers
+      ctx.imageSmoothingQuality = "high";
+      layers.push({ canvas, ctx });
+      el.append(canvas);
+    }
+    host.prepend(el);
+
+    const glow = { el, video, handle: 0, timer: 0, front: 0 };
+    // Wait for the next presented frame (paused video: none, so no wasted samples), then sample it
+    const sample = () => {
+      if (theaterGlow !== glow) return;
+      const next = layers[1 - glow.front];
+      try {
+        next.ctx.drawImage(video, 0, 0, GLOW_W, GLOW_H);
+        next.canvas.style.opacity = "1";
+        layers[glow.front].canvas.style.opacity = "0";
+        glow.front = 1 - glow.front;
+      } catch (_) {}
+      glow.timer = setTimeout(queue, GLOW_INTERVAL_MS);
+    };
+    const queue = () => {
+      if (theaterGlow === glow) glow.handle = video.requestVideoFrameCallback(sample);
+    };
+    theaterGlow = glow;
+    // Sample the current frame now so a paused video doesn't start without a glow
+    if (video.readyState >= 2) sample();
+    else queue();
+  }
+
+  // Theater CSS sizes the player box to the video's aspect ratio so controls and rounded corners sit on the video
+  let aspectVideo = null;
+
+  function syncVideoAspect() {
+    const v = aspectVideo;
+    if (!v || !v.videoWidth || !v.videoHeight) return;
+    const ar = (v.videoWidth / v.videoHeight).toFixed(4);
+    const root = document.documentElement;
+    if (root.style.getPropertyValue("--yt-deck-video-ar") === ar) return;
+    root.style.setProperty("--yt-deck-video-ar", ar);
+    // Nudge YouTube's player to re-layout its controls for the new box size
+    window.dispatchEvent(new Event("resize"));
+  }
+
+  function setupVideoAspect() {
+    const video = findVideoElement();
+    if (video === aspectVideo) return syncVideoAspect();
+    if (aspectVideo) {
+      aspectVideo.removeEventListener("loadedmetadata", syncVideoAspect);
+      aspectVideo.removeEventListener("resize", syncVideoAspect);
+    }
+    aspectVideo = video;
+    if (!video) return;
+    video.addEventListener("loadedmetadata", syncVideoAspect);
+    video.addEventListener("resize", syncVideoAspect);
+    syncVideoAspect();
+  }
+
+  function setupTheaterGlowObserver() {
+    setupVideoAspect();
+    const flexy = document.querySelector("ytd-watch-flexy");
+    if (theaterAttrObs) theaterAttrObs.disconnect();
+    if (flexy) {
+      theaterAttrObs = new MutationObserver(syncTheaterGlow);
+      theaterAttrObs.observe(flexy, { attributes: true, attributeFilter: ["theater", "fullscreen"] });
+    }
+    syncTheaterGlow();
+  }
+
   /* ── Cleanup on Navigation Away ───────────────────────────────────── */
 
   function cleanupWatchPage() {
+    stopTheaterGlow();
+    if (theaterAttrObs) {
+      theaterAttrObs.disconnect();
+      theaterAttrObs = null;
+    }
     if (continuationObserver) {
       continuationObserver.disconnect();
       continuationObserver = null;
@@ -521,6 +693,11 @@
       returnDebounceTimer = null;
     }
     currentObservedVideo = null;
+    try {
+      document.documentElement.removeAttribute("data-yt-deck-chat");
+      document.documentElement.removeAttribute("data-yt-deck-playlist");
+      document.documentElement.removeAttribute("data-yt-deck-queue");
+    } catch (_) {}
   }
 
   /* ── YouTube Logo Click to Miniplayer ────────────────────────────── */
@@ -532,6 +709,9 @@
     const logoLink = e.target.closest("a#logo, ytd-topbar-logo-renderer, a.ytd-topbar-logo-renderer");
     if (!logoLink) return;
 
+    // Let Ctrl/Cmd/Shift-click open Home in a new tab or window as usual
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return;
+
     // Only intercept when watching a video on the watch page
     if (!isWatchPage()) return;
 
@@ -542,62 +722,13 @@
     e.preventDefault();
     e.stopPropagation();
 
-    // Trigger native miniplayer via main world event & direct click fallback
+    // main_world.js clicks the miniplayer button (or presses "i"); clicking here too would toggle it twice
     try {
       window.dispatchEvent(new CustomEvent("yt-deck-toggle-miniplayer"));
     } catch (_) {}
-
-    const miniBtn =
-      document.querySelector(".ytp-miniplayer-button") ||
-      document.querySelector("button[data-tooltip-target-id='ytp-miniplayer-button']") ||
-      document.querySelector(".ytp-button.ytp-miniplayer-button");
-
-    if (miniBtn) {
-      try {
-        miniBtn.click();
-      } catch (_) {}
-    }
   }
 
   document.addEventListener("click", handleLogoClick, true);
-
-  /* ── Miniplayer State Sync for Ambient Glow Persistence ─────────── */
-
-  let miniplayerObs = null;
-
-  function syncMiniplayerState() {
-    try {
-      const miniplayer = document.querySelector("ytd-miniplayer");
-      const isActive =
-        miniplayer &&
-        (miniplayer.hasAttribute("active") ||
-          miniplayer.getAttribute("active") === "" ||
-          miniplayer.getAttribute("active") === "true");
-
-      document.documentElement.classList.toggle(
-        "yt-split-scroll-miniplayer-active",
-        Boolean(currentSettings.enabled && isActive)
-      );
-    } catch (_) {}
-  }
-
-  function setupMiniplayerObserver() {
-    if (miniplayerObs) return;
-
-    const miniplayer = document.querySelector("ytd-miniplayer");
-    if (!miniplayer) return;
-
-    miniplayerObs = new MutationObserver(() => {
-      syncMiniplayerState();
-    });
-
-    miniplayerObs.observe(miniplayer, {
-      attributes: true,
-      attributeFilter: ["active"],
-    });
-
-    syncMiniplayerState();
-  }
 
   /* ── Dedicated In-Player PiP Button ───────────────────────────────── */
 
@@ -659,11 +790,11 @@
       return;
     }
 
-    setupMiniplayerObserver();
     setupAutoPip();
     setupPlayerPipButton();
     setupContinuationObserver();
     setupMutationWatcher();
+    setupTheaterGlowObserver();
   }
 
   function scheduleInit() {
@@ -707,12 +838,6 @@
 
       if (changes.enabled !== undefined) {
         currentSettings.enabled = changes.enabled.newValue ?? DEFAULTS.enabled;
-      }
-      if (changes.stickyPlayer !== undefined) {
-        currentSettings.stickyPlayer = changes.stickyPlayer.newValue ?? DEFAULTS.stickyPlayer;
-      }
-      if (changes.hideScrollbars !== undefined) {
-        currentSettings.hideScrollbars = changes.hideScrollbars.newValue ?? DEFAULTS.hideScrollbars;
       }
       if (changes.hideShorts !== undefined) {
         currentSettings.hideShorts = changes.hideShorts.newValue ?? DEFAULTS.hideShorts;

@@ -1,6 +1,6 @@
 # TubeDeck for YouTube
 
-A power-user Chrome & Firefox extension that elevates your YouTube experience with dual-column independent scrolling, sticky video pinning, YouTube Shorts suppression, invisible scrollbars, and seamless Auto Picture-in-Picture.
+A power-user Chrome & Firefox extension that elevates your YouTube experience with dual-column independent scrolling, YouTube Shorts suppression, invisible scrollbars, and seamless Auto Picture-in-Picture.
 
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue)
 
@@ -8,15 +8,17 @@ A power-user Chrome & Firefox extension that elevates your YouTube experience wi
 
 ## Features
 
-- **Independent column scrolling** — the primary (left) and secondary (right) columns each get their own scrollbar on the YouTube watch page.
+- **Independent sidebar scrolling** — the suggestions sidebar (right) becomes its own sticky scroll column, while the video and comments (left) scroll with the page. Keeping the video in the page scroll lets the browser use hardware video overlay, so playback stays smooth.
 - **Hide Shorts everywhere** (optional, enabled by default) — eliminates YouTube Shorts shelves, feed items, watch recommendations, and navigation drawer links for a distraction-free experience.
 - **Hidden scrollbars** (enabled by default) — keep column scrolling completely invisible for a clean, minimalist UI without visual distraction.
 - **Picture-in-Picture (PiP) shortcut** — toggle floating PiP mode with an ergonomic shortcut (`Ctrl+Shift+8` global default that works even when the floating PiP window is focused; also supports `Alt+P`, `Alt+Shift+X`, and `Alt+X`).
 - **Auto PiP & Minimize PiP** — automatically enters floating PiP mode when switching tabs, minimizing the browser, or switching applications via Alt+Tab. The popup dynamically adapts: on native browsers like Helium, it provides a clean setup card with direct Flag & Site Permission links; on non-native browsers like Brave, it presents interactive toggles.
-- **Silky Ambient Lighting Blend & Full Ambilight** (optional) — gently morphs YouTube's ambient lighting with smooth 1.2s transitions between scene changes, preventing jarring color flashes.
+- **Silky Ambient Lighting Blend & Full Ambilight** (optional, "Ambient glow & glass UI" toggle) — gently morphs YouTube's ambient lighting with smooth 1.2s transitions between scene changes, preventing jarring color flashes.
 - **Instant Lightweight Startup** — runs at `document_start` with cached settings for zero-flicker styling and near-zero CPU footprint.
+- **Polished theater mode** — no black letterbox bars: the player shrinks to the video with rounded corners and the controls on the video, and the title, description, comments and suggestions sit in one rounded panel. Switching from default view eases the player in.
+- **One ambient switch** — the "Ambient glow & glass UI" toggle controls every glow in every mode, including YouTube's own. In theater mode the glow matches the default view in both themes, sampled as an 8×5 colour grid about once a second and crossfaded, so it stays light on the GPU.
 - **Logo click to miniplayer** — clicking the YouTube logo while watching a video docks it into YouTube's native miniplayer while taking you to the Home feed, seamlessly preserving playback and ambient glow.
-- **Translucent search capsule & button-style glassmorphism** — sleek, low-spec hardware optimized translucency matching YouTube's action buttons across the search bar, comments, and sidebar with zero GPU blur penalty.
+- **Translucent search capsule & button-style glassmorphism** (with the "Ambient glow & glass UI" toggle) — sleek, low-spec hardware optimized translucency matching YouTube's action buttons across the search bar, comments, and sidebar with zero GPU blur penalty.
 - **Ultra-compact minimalist popup** — redesigned with instant 0ms opening performance, sleek micro-switches, and zero visual clutter.
 - **Theater & fullscreen safe** — the split scroll is automatically disabled in theater mode and fullscreen.
 - **Responsive** — narrow viewports (< 1016 px) keep YouTube's default single-column layout.
@@ -71,8 +73,8 @@ Once granted, playback automatically transitions into a floating PiP window on t
 ## Usage
 
 1. Go to any YouTube video page (e.g. `https://www.youtube.com/watch?v=...`).
-2. The left column (player + comments) and right column (suggestions) now scroll independently.
-3. Click the extension icon in the toolbar to toggle split scrolling or enable the sticky player.
+2. The suggestions sidebar now scrolls independently of the page (video + comments).
+3. Click the extension icon in the toolbar to toggle split scrolling, Shorts hiding, full ambient glow and Auto-PiP.
 
 ---
 
@@ -96,7 +98,6 @@ YouTube updates its DOM periodically. All YouTube-specific selectors are documen
 | `#primary` | Left column (player, title, description, comments) |
 | `#secondary` | Right column (suggested videos, playlists) |
 | `ytd-continuation-item-renderer` | Infinite-scroll sentinel in sidebar |
-| `#player-container-outer` | Video player wrapper (for sticky player) |
 | `--ytd-masthead-height` | CSS variable for header height (default 56px) |
 
 ### How to check

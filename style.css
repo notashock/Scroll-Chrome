@@ -46,63 +46,70 @@
     align-items: flex-start;
   }
 
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #primary,
+  /*
+   * Only the sidebar becomes its own sticky scroll column; the left column (with the video) keeps
+   * using the page scroll. A video inside a nested scroll container loses the browser's hardware
+   * video overlay, so every frame is composited on the GPU and playback stutters.
+   * top: YouTube's --ytd-masthead-height (falls back to the standard 56px).
+   */
   html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary {
-    /*
-     * Make each column an independent scroll container.
-     *
-     * top: uses YouTube's own --ytd-masthead-height variable so the
-     * offset stays correct even if a promotional banner shifts it.
-     * Falls back to 56px (the standard masthead height).
-     */
     position: sticky;
     top: var(--ytd-masthead-height, 56px);
     height: calc(100vh - var(--ytd-masthead-height, 56px));
     overflow-y: auto;
-    align-self: flex-start;
-
-    /* Prevent horizontal scrollbar artifacts */
     overflow-x: hidden;
+    align-self: flex-start;
+    /* Isolates sidebar reflows (infinite suggestions) from the player */
+    contain: layout style;
   }
 
-  /* Allow ambient light (cinematics) to bleed naturally underneath suggestions */
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary,
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary-inner {
+  /* Allow ambient light (cinematics) to bleed naturally underneath suggestions, chat, and panels */
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #secondary,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #secondary-inner,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #secondary #items,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) ytd-watch-next-feed,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) ytd-item-section-renderer,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #related,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #chat-container,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #panels,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #panels-full-bleed-container,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #playlist.ytd-watch-flexy {
     background: transparent !important;
   }
 
-  html.yt-split-scroll:not(.yt-split-scroll-full-ambient) ytd-watch-flexy #cinematics {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    overflow: visible !important;
-    mask-image: linear-gradient(to right, black 55%, rgba(0, 0, 0, 0.5) 75%, transparent 95%) !important;
-    -webkit-mask-image: linear-gradient(to right, black 55%, rgba(0, 0, 0, 0.5) 75%, transparent 95%) !important;
+  /* ──────────────────────────────────────────────────────────── */
+  /*  Transparent Header (Masthead) & Protective Top Scrim       */
+  /*  Allows ambient glow to shine through the top of the window */
+  /* ──────────────────────────────────────────────────────────── */
+  /* Scoped to dark theme + watch page: the dark gradient and white-alpha glass break light theme. */
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch #masthead-container,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-masthead,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-masthead #background {
+    background: transparent !important;
   }
 
-  html.yt-split-scroll:not(.yt-split-scroll-full-ambient) ytd-watch-flexy #cinematics-container {
-    overflow: visible !important;
-    max-width: none !important;
-    contain: none !important;
-    clip-path: none !important;
-  }
-
-  html.yt-split-scroll:not(.yt-split-scroll-full-ambient) ytd-watch-flexy #cinematics canvas {
-    overflow: visible !important;
-    max-width: none !important;
-    contain: none !important;
-    clip-path: none !important;
-    transform: scaleX(1.3) !important;
-    transform-origin: left center !important;
-    will-change: transform, opacity;
-    transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch #masthead-container {
+    background: linear-gradient(
+      to bottom,
+      rgba(12, 12, 16, 0.72) 0%,
+      rgba(12, 12, 16, 0.25) 75%,
+      transparent 100%
+    ) !important;
+    border-bottom: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   /* ──────────────────────────────────────────────────────────── */
-  /*  Full-Viewport High-Intensity Ambient Lighting (Ambilight)  */
-  /*  Activated by html.yt-split-scroll.yt-split-scroll-full-ambient */
+  /*  Full-Viewport Ambient Lighting (Extends Behind Header & UI)*/
   /* ──────────────────────────────────────────────────────────── */
 
-  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #cinematics {
+  /* Viewport-wide ambient lighting extending behind the header and full layout.
+     Opt-in only (Full ambient glow): blending window-sized glow layers under the video every
+     frame makes playback stutter on weaker GPUs. Without it, YouTube's own player-sized glow is kept. */
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #cinematics,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy[theater]:not([fullscreen]) #yt-deck-theater-glow {
     position: fixed !important;
     inset: 0 !important;
     top: 0 !important;
@@ -114,26 +121,39 @@
     overflow: hidden !important;
     z-index: 0 !important;
     pointer-events: none !important;
-    mask-image: none !important;
-    -webkit-mask-image: none !important;
+  }
+
+  /* Soft feathered vignette, drawn as a static overlay in the page background colour.
+     Not mask-image: a mask on this constantly-redrawn full-viewport layer adds an extra
+     full-screen compositing pass per frame and measurably drops video frames. */
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #cinematics::after,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy[theater]:not([fullscreen]) #yt-deck-theater-glow::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(
+      ellipse 100% 90% at 50% 35%,
+      transparent 45%,
+      color-mix(in srgb, var(--yt-spec-base-background, var(--yt-deck-page-bg)) 25%, transparent) 75%,
+      var(--yt-spec-base-background, var(--yt-deck-page-bg)) 100%
+    );
   }
 
   html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #cinematics-container {
     position: absolute !important;
     inset: 0 !important;
-    top: 0 !important;
-    left: 0 !important;
     width: 100% !important;
     height: 100% !important;
     max-width: none !important;
     max-height: none !important;
-    overflow: visible !important;
-    contain: none !important;
-    clip-path: none !important;
-    transition: filter 1.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    overflow: hidden !important;
+    opacity: var(--yt-deck-ambient-opacity, 0.85) !important;
+    transition: opacity 0.8s ease-in-out !important;
   }
 
-  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #cinematics canvas {
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #cinematics canvas,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy[theater]:not([fullscreen]) #yt-deck-theater-glow canvas {
     position: absolute !important;
     top: 50% !important;
     left: 50% !important;
@@ -143,34 +163,170 @@
     min-height: 100vh !important;
     max-width: none !important;
     max-height: none !important;
-    transform: translate3d(-50%, -50%, 0) scale(1.45) !important;
+    transform: translate(-50%, -50%) scale(var(--yt-deck-ambient-scale, 1.25)) !important;
     transform-origin: center center !important;
     object-fit: cover !important;
-    contain: none !important;
-    clip-path: none !important;
-    backface-visibility: hidden !important;
-    filter: saturate(2.3) brightness(1.38) contrast(1.2) blur(24px) !important;
-    will-change: transform, opacity;
-    transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1), filter 1.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    pointer-events: none !important;
+    /* Ultra-smooth gradual crossfade: prevents abrupt color snapping between dark/vibrant scenes */
+    transition: opacity var(--yt-deck-ambient-transition, 1.5s) cubic-bezier(0.25, 1, 0.5, 1) !important;
+    will-change: opacity;
+    backface-visibility: hidden;
+    filter: none !important;
   }
 
-  /* Stacking context: Keep interactive columns cleanly layered over fixed canvas */
+  /* Adaptive ambient coverage when Live Chat is active */
+  html.yt-split-scroll.yt-split-scroll-full-ambient[data-yt-deck-chat="active"] ytd-watch-flexy:not([fullscreen]) #cinematics canvas,
+  html.yt-split-scroll.yt-split-scroll-full-ambient[data-yt-deck-chat="active"] ytd-watch-flexy[theater]:not([fullscreen]) #yt-deck-theater-glow canvas {
+    transform: translate(-50%, -50%) scale(1.4) !important;
+  }
+
+  /* Adaptive ambient coverage when Playlist or Queue is active */
+  html.yt-split-scroll.yt-split-scroll-full-ambient[data-yt-deck-playlist="active"] ytd-watch-flexy:not([fullscreen]) #cinematics canvas,
+  html.yt-split-scroll.yt-split-scroll-full-ambient[data-yt-deck-queue="active"] ytd-watch-flexy:not([fullscreen]) #cinematics canvas,
+  html.yt-split-scroll.yt-split-scroll-full-ambient[data-yt-deck-playlist="active"] ytd-watch-flexy[theater]:not([fullscreen]) #yt-deck-theater-glow canvas,
+  html.yt-split-scroll.yt-split-scroll-full-ambient[data-yt-deck-queue="active"] ytd-watch-flexy[theater]:not([fullscreen]) #yt-deck-theater-glow canvas {
+    transform: translate(-50%, -50%) scale(1.38) !important;
+  }
+
+  /* Theater mode: TubeDeck's glow (content.js) replaces YouTube's #cinematics, which paints over the
+     theater box and freezes in the light theme. It shares every default-view glow rule above (window
+     size, scale, edge fade, chat/playlist scaling), in both themes; only the opacity lives on the
+     wrapper here because the default view puts it on #cinematics-container. */
+  /* Theater mode always drops YouTube's black box (no letterbox bars), with or without the glow */
+  html.yt-split-scroll ytd-watch-flexy[theater]:not([fullscreen]) #full-bleed-container {
+    background: transparent !important;
+  }
+
+  /* The ambient toggle is the single switch for every glow, in every mode: with it off, YouTube's own
+     ambient glow is hidden too (it also stops compositing that layer under the video). */
+  html.yt-split-scroll:not(.yt-split-scroll-full-ambient) ytd-watch-flexy #cinematics {
+    display: none !important;
+  }
+
+  /* Never shown outside theater + ambient (default view keeps YouTube's own glow), even if content.js
+     hasn't removed it yet after a mode switch */
+  #yt-deck-theater-glow {
+    display: none;
+  }
+
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy[theater]:not([fullscreen]) #yt-deck-theater-glow {
+    display: block;
+  }
+
+  /* (With the toggle off, the rule above already hides it in every mode) */
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy[theater]:not([fullscreen]) #cinematics {
+    display: none !important;
+  }
+
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy[theater]:not([fullscreen]) #yt-deck-theater-glow {
+    opacity: var(--yt-deck-ambient-opacity, 0.85);
+    animation: yt-deck-fade-in 0.6s ease-out;
+  }
+
+  /* Default -> theater: the player settles in from a slight zoom and the glow fades up. Transform and
+     opacity only (compositor-run, no layout per frame), and only for the 0.35s of the switch. */
+  html.yt-split-scroll ytd-watch-flexy[theater]:not([fullscreen]) #player-container {
+    animation: yt-deck-theater-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  html.yt-split-scroll ytd-watch-flexy[theater]:not([fullscreen]) #columns {
+    animation: yt-deck-fade-in 0.35s ease-out;
+  }
+
+  @keyframes yt-deck-theater-in {
+    from { opacity: 0.6; transform: scale(0.96); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes yt-deck-fade-in {
+    from { opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html.yt-split-scroll ytd-watch-flexy[theater] #player-container,
+    html.yt-split-scroll ytd-watch-flexy[theater] #columns,
+    html.yt-split-scroll ytd-watch-flexy[theater] #yt-deck-theater-glow {
+      animation: none !important;
+    }
+  }
+
+  /* Theater mode: shrink the player box to the video itself (aspect ratio from content.js) so the
+     controls sit on the video, round its corners, and leave a gap under the header and above the title.
+     The theater box has an explicit height, so size containment is free and gives us cqw/cqh units. */
+  html.yt-split-scroll ytd-watch-flexy[theater]:not([fullscreen]) #full-bleed-container {
+    container-type: size;
+  }
+
+  html.yt-split-scroll ytd-watch-flexy[theater]:not([fullscreen]) #player-container {
+    --yt-deck-theater-gap: 10px;
+    /* Pin YouTube's own absolute positioning so the inset below always applies */
+    position: absolute !important;
+    inset: var(--yt-deck-theater-gap) 0 !important;
+    margin: 0 auto !important;
+    width: min(
+      100cqw - 2 * var(--yt-deck-theater-gap),
+      (100cqh - 2 * var(--yt-deck-theater-gap)) * var(--yt-deck-video-ar, 1.7778)
+    ) !important;
+    height: auto !important;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  html.yt-split-scroll ytd-watch-flexy[theater]:not([fullscreen]) #movie_player {
+    border-radius: 12px;
+  }
+
+  /* Theater mode: the block under the video (title, description, comments and suggestions) is one
+     rounded panel, inset from the window edges, in both themes. */
+  html.yt-split-scroll.yt-deck-watch ytd-watch-flexy[theater]:not([fullscreen]) #columns {
+    margin: 10px 10px 0;
+    /* #primary brings its own 16px left margin; #secondary has none on the right */
+    padding: 12px 16px 12px 0;
+    border-radius: 16px;
+    /* Light theme: frosted white so dark text stays readable over the full-strength glow (no blur) */
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  html[dark].yt-split-scroll.yt-deck-watch ytd-watch-flexy[theater]:not([fullscreen]) #columns {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  /* ──────────────────────────────────────────────────────────── */
+  /*  GPU-Safe Rendering Variables (no blur anywhere)            */
+  /* ──────────────────────────────────────────────────────────── */
+
+  :root {
+    --yt-deck-search-bg: rgba(22, 22, 28, 0.95);
+    --yt-deck-search-btn-bg: rgba(30, 30, 38, 0.92);
+    --yt-deck-menu-bg: rgba(20, 20, 26, 0.96);
+    --yt-deck-glass-bg: rgba(20, 20, 26, 0.82);
+    --yt-deck-ambient-opacity: 0.85;
+    --yt-deck-ambient-scale: 1.25;
+    --yt-deck-ambient-transition: 1.5s;
+    /* Page colour for vignettes/theater box; YouTube doesn't always expose --yt-spec-base-background */
+    --yt-deck-page-bg: #0f0f0f;
+  }
+
+  html:not([dark]) {
+    --yt-deck-page-bg: #ffffff;
+  }
+
+  /* Layer columns and player above the full-window glow. Only with the glow on: otherwise these
+     extra stacking contexts around the video are pure GPU overhead. */
   html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #columns {
     position: relative;
     z-index: 1;
   }
 
-  /* GPU Video Priority & Layout Isolation: Video decoding never yields to background suggestions */
-  ytd-watch-flexy #player-container-outer,
-  ytd-watch-flexy #player-container,
-  ytd-watch-flexy #ytd-player,
-  ytd-watch-flexy #movie_player,
-  ytd-watch-flexy #movie_player video,
-  ytd-watch-flexy video.html5-main-video {
-    position: relative;
-    z-index: 5 !important;
-    transform: translateZ(0);
-    contain: layout paint;
+  /* z-index only, never position: YouTube already positions these (#player-container is absolute inside
+     a padded aspect box), and forcing position: relative collapses the player to 0px height. */
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy #player-container-inner,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy #player-full-bleed-container,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy #player-container,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy #movie_player {
+    z-index: 2;
   }
 
   /* Offload off-screen suggestions: GPU skips rasterization & decoding until scrolled near view */
@@ -179,27 +335,33 @@
     contain-intrinsic-size: 1px 94px;
   }
 
-  /* Match YouTube action button glassmorphism (Like, Dislike, Share pills) */
-  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #secondary,
-  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #secondary-inner {
-    background: transparent !important;
+  /* Suggestion cards: Translucent glass reflection cards illuminated by ambient light */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy #secondary ytd-compact-video-renderer,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy #secondary yt-lockup-view-model {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 12px !important;
+    padding: 6px 8px !important;
+    margin-bottom: 8px !important;
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease !important;
   }
 
-  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #secondary #items {
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy #secondary ytd-compact-video-renderer:hover,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy #secondary yt-lockup-view-model:hover {
     background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    transform: translateX(3px);
+  }
+
+  /* Translucent ambient light reflection for description & comments */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy ytd-watch-metadata #description {
+    background: rgba(255, 255, 255, 0.04) !important;
     border-radius: 12px;
-    padding: 10px 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
-  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) ytd-watch-metadata #description {
-    background: rgba(255, 255, 255, 0.08) !important;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([fullscreen]) #comments {
-    background: rgba(255, 255, 255, 0.08) !important;
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy #comments {
+    background: rgba(255, 255, 255, 0.04) !important;
     border-radius: 12px;
     padding: 16px 20px;
     margin-top: 16px;
@@ -207,222 +369,300 @@
   }
 
   /* ──────────────────────────────────────────────────────────── */
-  /*  TubeDeck – Frosted Glassmorphism Search Capsule            */
-  /*  Designed with depth, layered reflections & micro-glow      */
+  /*  TubeDeck – Dynamic Screen Elements Glassmorphism           */
+  /*  Live Chat, Playlists, Engagement Panels & Floating Cards   */
   /* ──────────────────────────────────────────────────────────── */
 
-  /* Ensure parent containers don't block backdrop visibility */
-  html.yt-split-scroll ytd-searchbox,
-  html.yt-split-scroll yt-searchbox,
-  html.yt-split-scroll #search-form.ytd-searchbox,
-  html.yt-split-scroll form.ytSearchboxComponentSearchForm {
+  /* 1. Live Chat Glassmorphic Frame (Dynamically activated on live streams / premieres) */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy #chat,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy ytd-live-chat-frame {
+    background: var(--yt-deck-glass-bg, rgba(20, 20, 28, 0.76)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    margin-bottom: 16px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important;
+    transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch[data-yt-deck-chat="active"] ytd-watch-flexy #chat,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch[data-yt-deck-chat="active"] ytd-watch-flexy ytd-live-chat-frame {
+    border-color: rgba(255, 255, 255, 0.14) !important;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45), 0 0 16px rgba(255, 255, 255, 0.04) !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy #chat[collapsed],
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy ytd-live-chat-frame[collapsed] {
+    border-radius: 12px !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy #show-hide-button ytd-toggle-button-renderer button,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-watch-flexy #show-hide-button tp-yt-paper-button {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 10px !important;
+    color: #f1f1f1 !important;
+  }
+
+  /* 2. Playlist Panel & Queue (Dynamically activated when playing from a playlist or queue) */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-playlist-panel-renderer,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch #playlist.ytd-watch-flexy {
+    background: var(--yt-deck-glass-bg, rgba(20, 20, 28, 0.76)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    margin-bottom: 16px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important;
+    transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch[data-yt-deck-playlist="active"] ytd-playlist-panel-renderer,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch[data-yt-deck-playlist="active"] #playlist.ytd-watch-flexy {
+    border-color: rgba(255, 255, 255, 0.14) !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch[data-yt-deck-queue="active"] ytd-playlist-panel-renderer,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch[data-yt-deck-queue="active"] #playlist.ytd-watch-flexy {
+    border-color: rgba(0, 210, 255, 0.25) !important;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.4), 0 0 16px rgba(0, 210, 255, 0.08) !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-playlist-panel-renderer .header.ytd-playlist-panel-renderer,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-playlist-panel-renderer #header-contents {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-playlist-panel-video-renderer {
+    background: transparent !important;
+    border-radius: 8px !important;
+    margin: 2px 4px !important;
+    transition: background 0.15s ease !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-playlist-panel-video-renderer:hover {
+    background: rgba(255, 255, 255, 0.07) !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-playlist-panel-video-renderer[selected] {
+    background: rgba(0, 210, 255, 0.12) !important;
+    border-left: 3px solid rgba(0, 210, 255, 0.8) !important;
+  }
+
+  /* 3. Engagement Panels (Transcripts, Chapters, Structured Description) */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-engagement-panel-section-list-renderer {
+    background: var(--yt-deck-glass-bg, rgba(20, 20, 28, 0.78)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    margin-bottom: 16px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-engagement-panel-title-header-layout-renderer {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-transcript-segment-renderer:hover,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-macro-markers-list-item-renderer:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-radius: 8px !important;
+  }
+
+  /* 4. Merch, Products, & Donation Shelves */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-merch-shelf-renderer,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-products-shelf-renderer,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-clarification-renderer,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient.yt-deck-watch ytd-donation-shelf-renderer {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.07) !important;
+    border-radius: 12px !important;
+    padding: 8px 12px !important;
+    margin-bottom: 12px !important;
+  }
+
+  /* Pure zero-GPU alpha glass: 100% video rendering priority without backdrop-filter stalls */
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy #chat,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy ytd-live-chat-frame,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-playlist-panel-renderer,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-engagement-panel-section-list-renderer,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy ytd-watch-metadata #description,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy #comments {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* ──────────────────────────────────────────────────────────── */
+  /*  Instant Lightweight Thumbnail Loading Indicator            */
+  /*  Static placeholder for Watch sidebar cards (no animation:  */
+  /*  an endless background-position shimmer repaints per frame) */
+  /* ──────────────────────────────────────────────────────────── */
+
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary ytd-thumbnail,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary yt-thumbnail-view-model,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary a#thumbnail.ytd-compact-video-renderer {
+    position: relative !important;
+    background: linear-gradient(
+      110deg,
+      rgba(255, 255, 255, 0.03) 20%,
+      rgba(255, 255, 255, 0.08) 35%,
+      rgba(255, 255, 255, 0.03) 50%
+    ) !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+  }
+
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary ytd-thumbnail::before,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary yt-thumbnail-view-model::before,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary a#thumbnail.ytd-compact-video-renderer::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath opacity='0.22' d='M8 5v14l11-7z'/%3E%3C/svg%3E") no-repeat center;
+    background-size: contain;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary ytd-thumbnail img,
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary yt-thumbnail-view-model img {
+    position: relative;
+    z-index: 1;
+    border-radius: 8px !important;
+  }
+
+  /* ──────────────────────────────────────────────────────────── */
+  /*  TubeDeck – Sleek Search Capsule (Only When Ambient Enabled) */
+  /* ──────────────────────────────────────────────────────────── */
+
+  /* Ensure parent containers don't block backdrop visibility (only in full-ambient mode) */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient ytd-searchbox,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient yt-searchbox,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient #search-form.ytd-searchbox,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient form.ytSearchboxComponentSearchForm {
     background: transparent !important;
   }
 
-  /* Frosted Glass Input Container */
-  html.yt-split-scroll ytd-searchbox #container.ytd-searchbox,
-  html.yt-split-scroll yt-searchbox #container,
-  html.yt-split-scroll .ytSearchboxComponentInputBox {
-    background: rgba(18, 18, 24, 0.65) !important;
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  /* Zero backdrop-filter for search capsule: 100% video rendering priority */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient ytd-searchbox #container.ytd-searchbox,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient yt-searchbox #container,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .ytSearchboxComponentInputBox,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient ytd-searchbox #search-icon-legacy.ytd-searchbox,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient yt-searchbox #search-icon-legacy,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .ytSearchboxComponentSearchButton,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient #voice-search-button yt-icon-button,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient #voice-search-button button,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .ytSearchboxComponentVoiceSearchButton,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .sbdd_b,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .sbsb_a {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Search Input Container */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient ytd-searchbox #container.ytd-searchbox,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient yt-searchbox #container,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .ytSearchboxComponentInputBox {
+    background: var(--yt-deck-search-bg, rgba(22, 22, 28, 0.92)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
     border-right: none !important;
     border-radius: 40px 0 0 40px !important;
-    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.1), 0 4px 16px rgba(0, 0, 0, 0.25) !important;
-    transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-                border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-                box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease !important;
   }
 
   /* Search input inner typography & transparency */
-  html.yt-split-scroll ytd-searchbox #search-input.ytd-searchbox,
-  html.yt-split-scroll ytd-searchbox input#search,
-  html.yt-split-scroll yt-searchbox input,
-  html.yt-split-scroll .ytSearchboxComponentInput {
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient ytd-searchbox #search-input.ytd-searchbox,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient ytd-searchbox input#search,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient yt-searchbox input,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .ytSearchboxComponentInput {
     background: transparent !important;
     color: #f1f1f1 !important;
   }
 
   /* Focused State: Ethereal Cyan ambient rim */
-  html.yt-split-scroll ytd-searchbox[has-focus] #container.ytd-searchbox,
-  html.yt-split-scroll yt-searchbox[has-focus] #container,
-  html.yt-split-scroll ytd-searchbox #container.ytd-searchbox:focus-within,
-  html.yt-split-scroll .ytSearchboxComponentInputBox:focus-within {
-    background: rgba(22, 22, 30, 0.8) !important;
-    border-color: rgba(0, 210, 255, 0.45) !important;
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient ytd-searchbox[has-focus] #container.ytd-searchbox,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient yt-searchbox[has-focus] #container,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient ytd-searchbox #container.ytd-searchbox:focus-within,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .ytSearchboxComponentInputBox:focus-within {
+    background: rgba(28, 28, 36, 0.95) !important;
+    border-color: rgba(0, 210, 255, 0.5) !important;
     box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.15),
-                0 0 0 1px rgba(0, 210, 255, 0.3),
-                0 8px 30px rgba(0, 0, 0, 0.4) !important;
+                0 0 0 1px rgba(0, 210, 255, 0.35),
+                0 4px 16px rgba(0, 0, 0, 0.4) !important;
   }
 
-  /* Frosted Glass Search Button (seamless right cap) */
-  html.yt-split-scroll ytd-searchbox #search-icon-legacy.ytd-searchbox,
-  html.yt-split-scroll yt-searchbox #search-icon-legacy,
-  html.yt-split-scroll .ytSearchboxComponentSearchButton {
-    background: rgba(25, 25, 34, 0.6) !important;
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  /* Search Button (seamless right cap) */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient ytd-searchbox #search-icon-legacy.ytd-searchbox,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient yt-searchbox #search-icon-legacy,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .ytSearchboxComponentSearchButton {
+    background: var(--yt-deck-search-btn-bg, rgba(30, 30, 38, 0.88)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
     border-radius: 0 40px 40px 0 !important;
-    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.08), 0 4px 16px rgba(0, 0, 0, 0.25) !important;
-    transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-                border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-                box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+    transition: background 0.15s ease, border-color 0.15s ease !important;
   }
 
-  html.yt-split-scroll ytd-searchbox #search-icon-legacy.ytd-searchbox:hover,
-  html.yt-split-scroll yt-searchbox #search-icon-legacy:hover,
-  html.yt-split-scroll .ytSearchboxComponentSearchButton:hover {
-    background: rgba(35, 35, 46, 0.8) !important;
-    border-color: rgba(255, 255, 255, 0.2) !important;
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient ytd-searchbox #search-icon-legacy.ytd-searchbox:hover,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient yt-searchbox #search-icon-legacy:hover,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .ytSearchboxComponentSearchButton:hover {
+    background: rgba(45, 45, 56, 0.95) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
   }
 
-  /* Voice Search Orb (Matching Frosted Satellite) */
-  html.yt-split-scroll #voice-search-button yt-icon-button,
-  html.yt-split-scroll #voice-search-button button,
-  html.yt-split-scroll .ytSearchboxComponentVoiceSearchButton {
-    background: rgba(22, 22, 30, 0.65) !important;
-    backdrop-filter: blur(16px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease !important;
+  /* Voice Search Orb */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient #voice-search-button yt-icon-button,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient #voice-search-button button,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .ytSearchboxComponentVoiceSearchButton {
+    background: var(--yt-deck-search-bg, rgba(26, 26, 34, 0.9)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease !important;
   }
 
-  html.yt-split-scroll #voice-search-button:hover yt-icon-button,
-  html.yt-split-scroll #voice-search-button:hover button,
-  html.yt-split-scroll .ytSearchboxComponentVoiceSearchButton:hover {
-    background: rgba(35, 35, 46, 0.85) !important;
-    border-color: rgba(0, 210, 255, 0.35) !important;
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient #voice-search-button:hover yt-icon-button,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient #voice-search-button:hover button,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .ytSearchboxComponentVoiceSearchButton:hover {
+    background: rgba(40, 40, 52, 0.95) !important;
+    border-color: rgba(0, 210, 255, 0.4) !important;
     transform: scale(1.04);
   }
 
-  /* Autocomplete Suggestions Dropdown – Deep Frosted Glass Layer */
-  html.yt-split-scroll .sbdd_b,
-  html.yt-split-scroll .sbsb_a {
-    background: rgba(16, 16, 22, 0.82) !important;
-    backdrop-filter: blur(28px) saturate(190%) !important;
-    -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
+  /* Autocomplete Suggestions Dropdown */
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .sbdd_b,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .sbsb_a {
+    background: var(--yt-deck-menu-bg, rgba(20, 20, 26, 0.97)) !important;
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
     border-radius: 16px !important;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7) !important;
     overflow: hidden !important;
   }
 
-  html.yt-split-scroll .sbsb_c:hover,
-  html.yt-split-scroll .sbsb_d {
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .sbsb_c:hover,
+  html[dark].yt-split-scroll.yt-split-scroll-full-ambient .sbsb_d {
     background: rgba(255, 255, 255, 0.08) !important;
   }
 
-  /* ──────────────────────────────────────────────────────────── */
-  /*  Miniplayer & Home Feed Ambient Glow Persistence            */
-  /* ──────────────────────────────────────────────────────────── */
-
-  html.yt-split-scroll.yt-split-scroll-full-ambient.yt-split-scroll-miniplayer-active ytd-watch-flexy {
-    display: block !important;
-    visibility: visible !important;
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 0 !important;
-    height: 0 !important;
-    overflow: visible !important;
-    pointer-events: none !important;
-    z-index: 0 !important;
-  }
-
-  html.yt-split-scroll.yt-split-scroll-full-ambient.yt-split-scroll-miniplayer-active ytd-watch-flexy #cinematics {
-    display: block !important;
-    visibility: visible !important;
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    z-index: 0 !important;
-    pointer-events: none !important;
-    mask-image: none !important;
-    -webkit-mask-image: none !important;
-  }
-
-  html.yt-split-scroll.yt-split-scroll-full-ambient.yt-split-scroll-miniplayer-active ytd-watch-flexy #columns {
-    display: none !important;
-  }
-
-  /* Make home page feed background transparent so ambient light shows through */
-  html.yt-split-scroll.yt-split-scroll-full-ambient.yt-split-scroll-miniplayer-active #page-manager,
-  html.yt-split-scroll.yt-split-scroll-full-ambient.yt-split-scroll-miniplayer-active ytd-browse[page-subtype="home"] {
-    background: transparent !important;
-  }
-
   /* Miniplayer subtle glassmorphic dock frame */
-  html.yt-split-scroll ytd-miniplayer[active] {
+  html.yt-split-scroll.yt-split-scroll-full-ambient ytd-miniplayer[active] {
     border-radius: 14px !important;
     overflow: hidden !important;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
     z-index: 2000 !important;
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-  /*  Subtle scrollbars (Firefox-native scrollbar-* properties)  */
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-
-  /* Chrome/WebKit scrollbar styling (when hideScrollbars is disabled) */
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #primary::-webkit-scrollbar,
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #primary::-webkit-scrollbar-track,
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #primary::-webkit-scrollbar-thumb,
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary::-webkit-scrollbar-thumb {
-    background: rgba(128, 128, 128, 0.4);
-    border-radius: 3px;
-  }
-
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #primary::-webkit-scrollbar-thumb:hover,
-  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary::-webkit-scrollbar-thumb:hover {
-    background: rgba(128, 128, 128, 0.7);
-  }
-
-  /* Hidden scrollbars (active when hideScrollbars is enabled) */
-  html.yt-split-scroll.yt-split-scroll-hide-scrollbars
-    ytd-watch-flexy:not([theater]):not([fullscreen]) #primary,
-  html.yt-split-scroll.yt-split-scroll-hide-scrollbars
-    ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary {
+  /* Hidden sidebar scrollbar: the sidebar still scrolls, just without a visible bar */
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary {
     scrollbar-width: none;
-    -ms-overflow-style: none;
   }
 
-  html.yt-split-scroll.yt-split-scroll-hide-scrollbars
-    ytd-watch-flexy:not([theater]):not([fullscreen]) #primary::-webkit-scrollbar,
-  html.yt-split-scroll.yt-split-scroll-hide-scrollbars
-    ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary::-webkit-scrollbar {
+  html.yt-split-scroll ytd-watch-flexy:not([theater]):not([fullscreen]) #secondary::-webkit-scrollbar {
     display: none;
-    width: 0;
-    height: 0;
-  }
-}
-
-
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-/*  Phase 2 (optional): Sticky video player while scrolling       */
-/*  comments in the left column.                                  */
-/*  Activated by the class html.yt-split-scroll-sticky-player     */
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-
-@media (min-width: 1016px) {
-
-  html.yt-split-scroll.yt-split-scroll-sticky-player
-    ytd-watch-flexy:not([theater]):not([fullscreen]) #player-container-outer {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: var(--yt-spec-base-background, #0f0f0f);
   }
 }
 
