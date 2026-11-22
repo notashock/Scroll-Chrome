@@ -70,16 +70,6 @@
     } catch (_) {}
   }
 
-  function syncAmbientState() {
-    try {
-      const active = currentSettings.enabled && currentSettings.fullAmbient;
-      document.documentElement.setAttribute(
-        "data-yt-split-scroll-full-ambient",
-        active ? "true" : "false"
-      );
-    } catch (_) {}
-  }
-
   /* ── Adaptive UI State Sync (Live Chat, Playlists & Queues) ───────── */
 
   function syncAdaptiveUIState() {
@@ -135,7 +125,6 @@
     );
 
     syncAutoPipState();
-    syncAmbientState();
     syncAdaptiveUIState();
   }
 
@@ -548,80 +537,193 @@
 
   window.addEventListener("keydown", handleKeyDown, true);
 
-  /* ── Theater Glow (full-window ambient glow in theater mode) ──────── */
+  /* ── Ambient Glow (one engine for default and theater view) ─────── */
 
-  // YouTube's theater glow is boxed in and freezes in the light theme, so sample the video into an 8x5
-  // grid of averaged colours and let CSS stretch it. That few cells carries the scene's colours but no
-  // recognisable picture (a bigger grid read as a second video); bilinear upscaling is the blur.
-  // Each sample reads the whole video frame back from the GPU (1-2ms, with 30ms+ spikes on 1080p/4K),
-  // which stuttered playback at 8 samples/s. Like YouTube's own ambient, sample once per ~1.2s into
-  // one of two canvases and let the shared CSS opacity transition crossfade between them.
+  // A full-window wash of the video's colours, drawn by TubeDeck in every view and both themes
+  // (YouTube's own ambient layer is hidden: it is boxed in theater and freezes in the light theme).
+  // The video is reduced to an 8x5 grid of averaged colours (a texture's mipmaps), which carries the
+  // scene's colours but no recognisable picture; CSS stretches it and bilinear upscaling is the blur.
+  // Everything stays on the GPU: copying a frame into a 2D canvas forces a GPU->CPU readback that
+  // dropped ~40% of frames on 4K60 video. Measured on 4K60 with this path: no extra dropped frames.
   const GLOW_W = 8;
   const GLOW_H = 5;
-  const GLOW_INTERVAL_MS = 1200;
-  let theaterGlow = null;
-  let theaterAttrObs = null;
+  const GLOW_INTERVAL_MS = 1200; // one 4K texture upload per sample; ~3/s already cost frames
+  const GLOW_FADE_PER_FRAME = 0.06; // ease each new sample in over ~1s, entirely on the 8x5 textures
+  const GLOW_FADE_FRAMES = 70;
 
-  function stopTheaterGlow() {
-    if (!theaterGlow) return;
-    const { video, handle, timer, el } = theaterGlow;
+  const GLOW_VS = `#version 300 es
+in vec2 p; out vec2 uv;
+void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`;
+  // a: sampled at mip level lod (flipped for the top-down video), b: blended in by k.
+  // Video samples are graded into an ambient tint like YouTube's own: a little more saturated, then
+  // dimmed on the dark theme or lifted towards white on the light theme (raw colours wash the page out).
+  const GLOW_FS = `#version 300 es
+precision mediump float;
+in vec2 uv; uniform sampler2D a; uniform sampler2D b; uniform float k; uniform float lod; uniform float flip;
+uniform float light;
+out vec4 o;
+void main() {
+  vec4 ca = textureLod(a, flip > 0.5 ? vec2(uv.x, 1.0 - uv.y) : uv, lod);
+  if (flip > 0.5) {
+    float l = dot(ca.rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec3 c = clamp(mix(vec3(l), ca.rgb, 1.35), 0.0, 1.0);
+    ca.rgb = light > 0.5 ? mix(c, vec3(1.0), 0.45) : c * 0.55;
+  }
+  o = mix(ca, texture(b, uv), k);
+}`;
+
+  let ambientGlow = null;
+  let glowAttrObs = null;
+
+  function stopAmbientGlow() {
+    if (!ambientGlow) return;
+    const { video, handle, timer, raf, el, gl } = ambientGlow;
     clearTimeout(timer);
+    cancelAnimationFrame(raf);
     try { video.cancelVideoFrameCallback(handle); } catch (_) {}
+    try { gl.getExtension("WEBGL_lose_context")?.loseContext(); } catch (_) {} // free the video texture now
     el.remove();
-    theaterGlow = null;
+    ambientGlow = null;
   }
 
-  function syncTheaterGlow() {
+  function createGlowRenderer(canvas) {
+    const gl = canvas.getContext("webgl2", {
+      alpha: false, antialias: false, depth: false, stencil: false, powerPreference: "low-power",
+    });
+    if (!gl) return null;
+    const shader = (type, src) => {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      return sh;
+    };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, shader(gl.VERTEX_SHADER, GLOW_VS));
+    gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, GLOW_FS));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    const u = (name) => gl.getUniformLocation(prog, name);
+    const uK = u("k"), uLod = u("lod"), uFlip = u("flip"), uLight = u("light");
+    gl.uniform1i(u("a"), 0);
+    gl.uniform1i(u("b"), 1);
+
+    const texture = (minFilter) => {
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return t;
+    };
+    // 8x5 render targets: the newest sample, and a ping-pong pair for the eased, displayed colours
+    const target = () => {
+      const t = texture(gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GLOW_W, GLOW_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      const fb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+      return { t, fb };
+    };
+    const videoTex = texture(gl.LINEAR_MIPMAP_LINEAR);
+    const latest = target();
+    const shown = [target(), target()];
+    let cur = 0;
+    let primed = false;
+
+    const pass = (fb, a, b, k, lod, flip) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.viewport(0, 0, GLOW_W, GLOW_H);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, a);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, b);
+      gl.uniform1f(uK, k);
+      gl.uniform1f(uLod, lod);
+      gl.uniform1f(uFlip, flip);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    };
+    const present = () => pass(null, shown[cur].t, shown[cur].t, 0, 0, 0);
+
+    return {
+      gl,
+      // Upload the current frame and average it down to 8x5 on the GPU (never read back)
+      sample(video) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, videoTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        const lod = Math.log2(Math.max(video.videoWidth / GLOW_W, video.videoHeight / GLOW_H, 1));
+        gl.uniform1f(uLight, document.documentElement.hasAttribute("dark") ? 0 : 1);
+        // b is unused at k=0 but must not be latest.t: sampling the texture being rendered into is a
+        // feedback loop that WebGL rejects (INVALID_OPERATION, black glow)
+        pass(latest.fb, videoTex, videoTex, 0, lod, 1);
+        if (!primed) {
+          primed = true;
+          pass(shown[cur].fb, latest.t, latest.t, 0, 0, 0);
+          present();
+        }
+      },
+      // One easing step towards the newest sample, then draw it to the visible canvas
+      step() {
+        pass(shown[1 - cur].fb, shown[cur].t, latest.t, GLOW_FADE_PER_FRAME, 0, 0);
+        cur = 1 - cur;
+        present();
+      },
+    };
+  }
+
+  function syncAmbientGlow() {
     const flexy = document.querySelector("ytd-watch-flexy");
-    // Full-window glow in both themes, like the default view. It lives in the flexy, not the theater
-    // box, because the box's size containment would trap a position: fixed child.
-    const host = flexy;
     const video = findVideoElement();
     const wanted = Boolean(
       currentSettings.enabled && currentSettings.fullAmbient && isWatchPage() &&
-      host && video && typeof video.requestVideoFrameCallback === "function" &&
-      flexy.hasAttribute("theater") && !flexy.hasAttribute("fullscreen")
+      flexy && video && typeof video.requestVideoFrameCallback === "function" &&
+      !flexy.hasAttribute("fullscreen")
     );
-    if (!wanted) return stopTheaterGlow();
-    if (theaterGlow && theaterGlow.video === video && theaterGlow.el.parentNode === host) return;
+    if (!wanted) return stopAmbientGlow();
+    if (ambientGlow && ambientGlow.video === video && ambientGlow.el.parentNode === flexy) return;
 
-    stopTheaterGlow();
-    // Wrapper carries the edge-fade ::after (a canvas can't have pseudo-elements)
+    stopAmbientGlow();
+    // Wrapper carries the edge-fade ::after (a canvas can't have pseudo-elements). It lives in the
+    // flexy, not the theater box, whose size containment would trap a position: fixed child.
     const el = document.createElement("div");
-    el.id = "yt-deck-theater-glow";
-    const layers = [];
-    for (let i = 0; i < 2; i++) {
-      const canvas = document.createElement("canvas");
-      canvas.width = GLOW_W;
-      canvas.height = GLOW_H;
-      canvas.style.opacity = "0";
-      const ctx = canvas.getContext("2d", { alpha: false });
-      if (!ctx) return;
-      // Average the frame down (mipmapped) instead of point-sampling a few pixels, which flickers
-      ctx.imageSmoothingQuality = "high";
-      layers.push({ canvas, ctx });
-      el.append(canvas);
-    }
-    host.prepend(el);
+    el.id = "yt-deck-glow";
+    const canvas = document.createElement("canvas");
+    canvas.width = GLOW_W;
+    canvas.height = GLOW_H;
+    const renderer = createGlowRenderer(canvas);
+    if (!renderer) return; // no WebGL2: no glow rather than the stuttering 2D readback path
+    el.append(canvas);
+    flexy.prepend(el);
 
-    const glow = { el, video, handle: 0, timer: 0, front: 0 };
-    // Wait for the next presented frame (paused video: none, so no wasted samples), then sample it
+    const glow = { el, video, gl: renderer.gl, handle: 0, timer: 0, raf: 0, frames: 0 };
+    const ease = () => {
+      glow.raf = 0;
+      if (ambientGlow !== glow) return;
+      renderer.step();
+      if (--glow.frames > 0) glow.raf = requestAnimationFrame(ease);
+    };
+    // Wait for the next presented frame (a paused video presents none, so nothing runs), then sample
     const sample = () => {
-      if (theaterGlow !== glow) return;
-      const next = layers[1 - glow.front];
+      if (ambientGlow !== glow) return;
       try {
-        next.ctx.drawImage(video, 0, 0, GLOW_W, GLOW_H);
-        next.canvas.style.opacity = "1";
-        layers[glow.front].canvas.style.opacity = "0";
-        glow.front = 1 - glow.front;
-      } catch (_) {}
+        renderer.sample(video);
+        glow.frames = GLOW_FADE_FRAMES;
+        if (!glow.raf) glow.raf = requestAnimationFrame(ease);
+      } catch (_) {} // e.g. a non-CORS video source
       glow.timer = setTimeout(queue, GLOW_INTERVAL_MS);
     };
     const queue = () => {
-      if (theaterGlow === glow) glow.handle = video.requestVideoFrameCallback(sample);
+      if (ambientGlow === glow) glow.handle = video.requestVideoFrameCallback(sample);
     };
-    theaterGlow = glow;
-    // Sample the current frame now so a paused video doesn't start without a glow
+    canvas.addEventListener("webglcontextlost", () => { if (ambientGlow === glow) stopAmbientGlow(); });
+    ambientGlow = glow;
     if (video.readyState >= 2) sample();
     else queue();
   }
@@ -654,24 +756,24 @@
     syncVideoAspect();
   }
 
-  function setupTheaterGlowObserver() {
+  function setupAmbientGlowObserver() {
     setupVideoAspect();
     const flexy = document.querySelector("ytd-watch-flexy");
-    if (theaterAttrObs) theaterAttrObs.disconnect();
+    if (glowAttrObs) glowAttrObs.disconnect();
     if (flexy) {
-      theaterAttrObs = new MutationObserver(syncTheaterGlow);
-      theaterAttrObs.observe(flexy, { attributes: true, attributeFilter: ["theater", "fullscreen"] });
+      glowAttrObs = new MutationObserver(syncAmbientGlow);
+      glowAttrObs.observe(flexy, { attributes: true, attributeFilter: ["fullscreen"] });
     }
-    syncTheaterGlow();
+    syncAmbientGlow();
   }
 
   /* ── Cleanup on Navigation Away ───────────────────────────────────── */
 
   function cleanupWatchPage() {
-    stopTheaterGlow();
-    if (theaterAttrObs) {
-      theaterAttrObs.disconnect();
-      theaterAttrObs = null;
+    stopAmbientGlow();
+    if (glowAttrObs) {
+      glowAttrObs.disconnect();
+      glowAttrObs = null;
     }
     if (continuationObserver) {
       continuationObserver.disconnect();
@@ -794,7 +896,7 @@
     setupPlayerPipButton();
     setupContinuationObserver();
     setupMutationWatcher();
-    setupTheaterGlowObserver();
+    setupAmbientGlowObserver();
   }
 
   function scheduleInit() {

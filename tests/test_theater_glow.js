@@ -1,4 +1,4 @@
-// Theater mode with the ambient toggle on: TubeDeck's glow (content.js #yt-deck-theater-glow) must match the
+// Theater mode with the ambient toggle on: TubeDeck's glow (content.js #yt-deck-glow) must match the
 // default-view ambient glow (full window, 1.25x scale, edge fade, 0.85 opacity) in both themes, with the
 // player fitted to the video. Headless Chrome: `node tests/test_theater_glow.js`.
 const fs = require('fs');
@@ -10,8 +10,11 @@ const styleCss = fs.readFileSync(path.join(workspaceRoot, 'style.css'), 'utf8');
 const contentJs = fs.readFileSync(path.join(workspaceRoot, 'content.js'), 'utf8');
 const failures = [];
 
-if (!contentJs.includes('yt-deck-theater-glow') || !contentJs.includes('requestVideoFrameCallback')) {
-  failures.push('FAIL: content.js does not create the frame-driven #yt-deck-theater-glow canvas.');
+if (!contentJs.includes('yt-deck-glow') || !contentJs.includes('requestVideoFrameCallback')) {
+  failures.push('FAIL: content.js does not create the frame-driven #yt-deck-glow canvas.');
+}
+if (/#columns\s*\{[^}]*z-index:\s*[1-9]/.test(styleCss) || /#movie_player\s*\{[^}]*z-index:\s*[1-9]/.test(styleCss)) {
+  failures.push('FAIL: z-indexed #columns/#movie_player stacking layers are back; they drop frames at 4K60.');
 }
 // Default view: YouTube positions #player-container absolute inside a padded aspect box, so forcing a
 // position on it (outside theater, where it is pinned back to absolute) collapses the video to 0px.
@@ -25,17 +28,21 @@ for (const [, selectors, body] of styleCss.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
 const interval = Number((contentJs.match(/GLOW_INTERVAL_MS = (\d+)/) || [])[1]);
 if (!(interval >= 1000)) failures.push(`FAIL: theater glow samples every ${interval}ms; GPU readbacks that often stutter playback.`);
 // Ambient toggle off = no glow anywhere, including YouTube's own
-if (!/html\.yt-split-scroll:not\(\.yt-split-scroll-full-ambient\) ytd-watch-flexy #cinematics\s*\{[^}]*display:\s*none/.test(styleCss)) {
+if (!/html\.yt-split-scroll ytd-watch-flexy #cinematics\s*\{[^}]*display:\s*none/.test(styleCss)) {
   failures.push('FAIL: YouTube own ambient glow still shows with the ambient toggle off.');
+}
+// 2D drawImage(video) forces a GPU->CPU readback of every sampled frame (~40% dropped frames at 4K60)
+if (!contentJs.includes('getContext("webgl2"') || /\.drawImage\(\s*video/.test(contentJs)) {
+  failures.push('FAIL: the glow must sample the video in WebGL, not with a 2D drawImage readback.');
 }
 if (!/GLOW_W = 8;/.test(contentJs)) {
   failures.push('FAIL: theater glow samples more than an 8x5 grid; it reads as a second video instead of ambient colour.');
 }
-if (/yt-deck-theater-glow[^{]*\{[^}]*(filter:\s*blur|mask-image)/.test(styleCss)) {
+if (/yt-deck-glow[^{]*\{[^}]*(filter:\s*blur|mask-image)/.test(styleCss)) {
   failures.push('FAIL: theater glow uses blur/mask; the 32x18 upscale is the blur, extra passes drop frames.');
 }
 
-const GLOW = '<div id="yt-deck-theater-glow"><canvas width="32" height="18"></canvas></div>';
+const GLOW = '<div id="yt-deck-glow"><canvas width="8" height="5"></canvas></div>';
 
 function render(dark, ambient = true) {
   const html = `<!DOCTYPE html>
@@ -51,6 +58,7 @@ function render(dark, ambient = true) {
   *, *::after { animation: none !important; }
 </style></head>
 <body>
+  <ytd-searchbox><div id="container" class="ytd-searchbox"></div></ytd-searchbox>
   <ytd-watch-flexy theater>
     ${GLOW}
     <div id="full-bleed-container">
@@ -62,7 +70,7 @@ function render(dark, ambient = true) {
   <pre id="output"></pre>
   <script>
     const host = document.querySelector('#full-bleed-container');
-    const glow = document.querySelector('#yt-deck-theater-glow');
+    const glow = document.querySelector('#yt-deck-glow');
     const g = getComputedStyle(glow), h = host.getBoundingClientRect(), r = glow.getBoundingClientRect();
     document.getElementById('output').textContent = JSON.stringify({
       hostBg: getComputedStyle(host).backgroundColor,
@@ -73,7 +81,8 @@ function render(dark, ambient = true) {
       fillsBox: r.width === h.width && r.height === h.height,
       fillsWindow: r.top === 0 && r.left === 0 && r.width === innerWidth && r.height === innerHeight,
       vignette: getComputedStyle(glow, '::after').backgroundImage.includes('radial-gradient'),
-      columnsZ: getComputedStyle(document.querySelector('#columns')).zIndex,
+      glowZ: g.zIndex,
+      searchBg: getComputedStyle(document.querySelector('#container.ytd-searchbox')).backgroundColor,
       canvasTransform: getComputedStyle(glow.querySelector('canvas')).transform,
       player: (() => { const p = document.querySelector('#player-container'), b = p.getBoundingClientRect();
         return { top: Math.round(b.top - h.top), bottom: Math.round(h.bottom - b.bottom), w: Math.round(b.width), h: Math.round(b.height),
@@ -108,7 +117,8 @@ for (const dark of [true, false]) {
     if (d.cinematicsDisplay !== 'none') failures.push(`FAIL (${theme}): YouTube #cinematics still paints over the theater bars.`);
     if (d.glowPosition !== 'fixed' || !d.fillsWindow) failures.push(`FAIL (${theme}): glow does not cover the whole window.`);
     if (!d.vignette) failures.push(`FAIL (${theme}): glow has no edge-fade vignette.`);
-    if (d.columnsZ !== '1') failures.push(`FAIL (${theme}): title/suggestions panel is not layered above the glow (z ${d.columnsZ}).`);
+    // Below all page content without extra stacking layers around the video (those cost frames at 4K60)
+    if (d.glowZ !== '-1') failures.push(`FAIL (${theme}): glow z-index ${d.glowZ}; it must sit at -1, under the page content.`);
     // Same 1.25x spread as the default-view #cinematics canvas
     if (!d.canvasTransform.startsWith('matrix(1.25, 0, 0, 1.25,')) failures.push(`FAIL (${theme}): glow scale ${d.canvasTransform} differs from the default view.`);
     // 600px box, 10px gaps -> 580px tall player at 4:3 = 773px wide, centred, rounded
@@ -120,6 +130,9 @@ for (const dark of [true, false]) {
     // Title, description, comments and suggestions share one rounded, tinted panel
     if (d.columnsRadius !== '16px') failures.push(`FAIL (${theme}): #columns panel is not rounded (${d.columnsRadius}).`);
     if (d.columnsBg === 'rgba(0, 0, 0, 0)') failures.push(`FAIL (${theme}): #columns panel has no tint, so its rounding is invisible.`);
+    // Search capsule follows each theme's glass style: white tint on dark, frosted white on light
+    const wantSearch = dark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(255, 255, 255, 0.7)';
+    if (d.searchBg !== wantSearch) failures.push(`FAIL (${theme}): search capsule background ${d.searchBg}, expected ${wantSearch}.`);
     if (d.glowOpacity !== '0.85') failures.push(`FAIL (${theme}): glow opacity ${d.glowOpacity}, expected the default-view 0.85.`);
   } catch (e) {
     failures.push(`Headless Chrome execution error (${theme}): ${e.message}`);

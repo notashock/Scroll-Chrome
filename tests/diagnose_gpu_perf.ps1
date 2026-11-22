@@ -40,8 +40,8 @@ if ($styleContent -match 'data-yt-perf-tier' -or $styleContent -match '--yt-deck
 # Check 3: Full ambient glow is a real mode: own stronger variables, theater-mode glow only when enabled
 # Window-sized glow layers under the video stutter playback on weak GPUs, so they must be opt-in
 Write-Host "[Check 3] Verifying full-window glow applies ONLY with Full ambient glow enabled..." -NoNewline
-$hasUnscopedGlow = ($styleContent -match '(?m)^\s*html\.yt-split-scroll(?:\[[^\]]*\])? ytd-watch-flexy[^{,]*#cinematics')
-$hasFullAmbientGlow = ($styleContent -match 'html\.yt-split-scroll\.yt-split-scroll-full-ambient ytd-watch-flexy:not\(\[fullscreen\]\) #cinematics(?:,[^{]*)?\s*\{[^}]*position:\s*fixed')
+$hasUnscopedGlow = ($styleContent -match '(?m)^\s*html\.yt-split-scroll(?:\[[^\]]*\])? ytd-watch-flexy[^{,]*#yt-deck-glow')
+$hasFullAmbientGlow = ($styleContent -match 'html\.yt-split-scroll\.yt-split-scroll-full-ambient ytd-watch-flexy:not\(\[fullscreen\]\) #yt-deck-glow\s*\{[^}]*position:\s*fixed')
 # Split scrolling is layout only: the see-through header and glass UI belong to the ambient toggle
 $hasUnscopedLook = ($styleContent -match '(?m)^\s*html(?:\[dark\])?\.yt-split-scroll(?:\.yt-deck-watch)?(?:\[[^\]]*\])?\s[^{,]*(?:#masthead-container|ytd-masthead|#comments|ytd-live-chat-frame|ytd-playlist-panel-renderer|ytd-engagement-panel-section-list-renderer|ytd-miniplayer)')
 if ($hasFullAmbientGlow -and -not $hasUnscopedGlow -and -not $hasUnscopedLook) {
@@ -166,16 +166,17 @@ if ($hasDynamicProtection) {
     Write-Host " [RED]" -ForegroundColor Red
 }
 
-# Check 14: Ultra-Smooth Ambient Light Crossfade Integrity
-Write-Host "[Check 14] Verifying ambient light smooth transition & crossfade integrity..." -NoNewline
-$hasCanvasCubicTransition = ($styleContent -match '#cinematics canvas(?:,[^{]*)?\s*\{[^}]*transition:\s*opacity[^;]+cubic-bezier')
-$canvasHasHardcodedOpacity = ($styleContent -match '#cinematics canvas(?:,[^{]*)?\s*\{[^}]*opacity:\s*var\(--yt-deck-ambient-opacity')
-$containerHasMasterOpacity = ($styleContent -match '#cinematics-container\s*\{[^}]*opacity:\s*var\(--yt-deck-ambient-opacity')
-$hasTransitionVar = ($styleContent -match '--yt-deck-ambient-transition:\s*1\.[258]s')
-if ($hasCanvasCubicTransition -and -not $canvasHasHardcodedOpacity -and $containerHasMasterOpacity -and $hasTransitionVar) {
+# Check 14: Ambient glow samples and eases on the GPU
+# Copying a video frame into a 2D canvas forces a GPU->CPU readback: ~40% dropped frames on 4K60
+Write-Host "[Check 14] Verifying ambient glow samples on the GPU (WebGL) and eases colour changes..." -NoNewline
+$samplesOnGpu = ($contentContent -match 'getContext\("webgl2"') -and ($contentContent -match 'generateMipmap')
+$easesOnGpu = ($contentContent -match 'GLOW_FADE_PER_FRAME')
+$readsBackVideo = ($contentContent -match '\.drawImage\(\s*video')
+$hasOpacityVar = ($styleContent -match '#yt-deck-glow\s*\{[^}]*opacity:\s*var\(--yt-deck-ambient-opacity')
+if ($samplesOnGpu -and $easesOnGpu -and -not $readsBackVideo -and $hasOpacityVar) {
     Write-Host " [GREEN]" -ForegroundColor Green
 } else {
-    $failures += "FAIL: Ambient light smooth transition is broken! Canvas has hard-coded opacity or lacks cubic-bezier crossfade."
+    $failures += "FAIL: Ambient glow must sample the video in WebGL (no 2D drawImage readback) and ease colours on the GPU!"
     Write-Host " [RED]" -ForegroundColor Red
 }
 
@@ -213,7 +214,7 @@ if ($hasSecondaryContainment -and -not $hasPrimaryContainment -and -not $hasPrim
 # Check 17: Zero-GPU Backdrop-Filter Elimination Across UI
 Write-Host "[Check 17] Verifying complete elimination of GPU-costly backdrop-filter blurs..." -NoNewline
 $hasBackdropFilterBlur = ($styleContent -match 'backdrop-filter:\s*blur\(')
-$hasCanvasFilterBlur = ($styleContent -match '#cinematics canvas(?:,[^{]*)?\s*\{[^}]*filter:\s*blur\(')
+$hasCanvasFilterBlur = ($styleContent -match '#yt-deck-glow canvas[^{]*\{[^}]*filter:\s*blur\(')
 if ($hasBackdropFilterBlur -or $hasCanvasFilterBlur) {
     $failures += "FAIL: Active backdrop-filter blur or canvas filter blur detected in style.css!"
     Write-Host " [RED]" -ForegroundColor Red
@@ -223,13 +224,13 @@ if ($hasBackdropFilterBlur -or $hasCanvasFilterBlur) {
 
 # Check 18: Feathered Ambient Lighting Vignette Masks
 # Vignette must be a static ::after overlay: mask-image on the full-viewport ambient layer drops video frames
-Write-Host "[Check 18] Verifying feathered vignette overlay (no mask-image) on ambient cinematics..." -NoNewline
-$hasVignette = ($styleContent -match '#cinematics::after(?:,[^{]*)?\s*\{[^}]*radial-gradient')
-$hasCostlyMask = ($styleContent -match '#cinematics[^{]*\{[^}]*mask-image')
+Write-Host "[Check 18] Verifying feathered vignette overlay (no mask-image) on the ambient glow..." -NoNewline
+$hasVignette = ($styleContent -match '#yt-deck-glow::after\s*\{[^}]*radial-gradient')
+$hasCostlyMask = ($styleContent -match '#(?:cinematics|yt-deck-glow)[^{]*\{[^}]*mask-image')
 if ($hasVignette -and -not $hasCostlyMask) {
     Write-Host " [GREEN]" -ForegroundColor Green
 } else {
-    $failures += "FAIL: #cinematics needs the ::after radial-gradient vignette and must not use mask-image (drops video frames)!"
+    $failures += "FAIL: #yt-deck-glow needs the ::after radial-gradient vignette and must not use mask-image (drops video frames)!"
     Write-Host " [RED]" -ForegroundColor Red
 }
 
@@ -250,9 +251,9 @@ if ($hasChatStyle -and $hasPlaylistStyle -and $hasQueueStyle -and $hasContentSyn
 Write-Host "[Check 20] Verifying ambient lighting expansion to header (masthead) & full viewport..." -NoNewline
 $hasMastheadTransparency = ($styleContent -match '#masthead-container[^{]*\{[^}]*background:\s*(?:transparent|linear-gradient)') -and
                            ($styleContent -match 'ytd-masthead[^{]*\{[^}]*background:\s*transparent')
-$hasCinematicsFixed = ($styleContent -match '#cinematics(?:,[^{]*)?\s*\{[^}]*position:\s*fixed[^;]*!important') -and
-                      ($styleContent -match '#cinematics(?:,[^{]*)?\s*\{[^}]*width:\s*100vw[^;]*!important') -and
-                      ($styleContent -match '#cinematics(?:,[^{]*)?\s*\{[^}]*height:\s*100vh[^;]*!important')
+$hasCinematicsFixed = ($styleContent -match '#yt-deck-glow\s*\{[^}]*position:\s*fixed') -and
+                      ($styleContent -match '#yt-deck-glow\s*\{[^}]*width:\s*100vw') -and
+                      ($styleContent -match '#yt-deck-glow\s*\{[^}]*height:\s*100vh')
 if ($hasMastheadTransparency -and $hasCinematicsFixed) {
     Write-Host " [GREEN]" -ForegroundColor Green
 } else {

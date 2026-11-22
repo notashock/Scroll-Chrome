@@ -111,35 +111,6 @@
     } catch (_) {}
   }
 
-  function isFullAmbientActive() {
-    return document.documentElement.getAttribute("data-yt-split-scroll-full-ambient") === "true";
-  }
-
-  function ensureCinematicsEnabled() {
-    // Only force cinematics on when the user opted into Full ambient; otherwise respect YouTube's own Ambient setting.
-    if (!isFullAmbientActive()) return;
-
-    try {
-      const player =
-        document.getElementById("movie_player") ||
-        document.querySelector(".html5-video-player");
-
-      if (player && typeof player.setOption === "function") {
-        player.setOption("cinematics", "enabled", true);
-      }
-
-      // Optimize cinematics canvas layers for GPU compositor
-      const canvases = document.querySelectorAll("#cinematics canvas");
-      for (const c of canvases) {
-        if (!c._deckOptimized) {
-          c._deckOptimized = true;
-          c.style.willChange = "opacity";
-          c.style.backfaceVisibility = "hidden";
-        }
-      }
-    } catch (_) {}
-  }
-
   let lastHookCheck = 0;
 
   // Hook playback events on active video to continuously guarantee autoPictureInPicture
@@ -160,7 +131,6 @@
 
   function refreshPipState() {
     registerMediaSession();
-    ensureCinematicsEnabled();
     const video = findMainVideo();
     if (video) {
       unlockVideo(video);
@@ -232,21 +202,18 @@
   // React to attribute changes from content script
   const observer = new MutationObserver(() => {
     registerMediaSession();
-    ensureCinematicsEnabled();
     hookVideoEvents();
   });
   observer.observe(document.documentElement, {
     attributes: true,
     attributeFilter: [
       "data-yt-split-scroll-auto-pip",
-      "data-yt-split-scroll-full-ambient",
     ],
   });
 
   document.addEventListener("yt-navigate-finish", () => {
     setTimeout(() => {
       registerMediaSession();
-      ensureCinematicsEnabled();
       hookVideoEvents();
       setupPlayerObserver();
     }, 200);
@@ -292,6 +259,5 @@
   });
 
   registerMediaSession();
-  ensureCinematicsEnabled();
   hookVideoEvents();
 })();

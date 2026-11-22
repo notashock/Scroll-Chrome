@@ -10,14 +10,14 @@ const failures = [];
 
 console.log('Testing Ambient Lighting Feathering & UI Adaptability...\n');
 
-// Check 1: Feathered vignette on #cinematics (static ::after overlay, never mask-image)
-const vignetteMatch = styleCss.match(/html\.yt-split-scroll\.yt-split-scroll-full-ambient ytd-watch-flexy:not\(\[fullscreen\]\) #cinematics::after(?:,[^{]*)?\s*\{([^}]+)\}/);
+// Check 1: Feathered vignette on the glow (static ::after overlay, never mask-image)
+const vignetteMatch = styleCss.match(/html\.yt-split-scroll\.yt-split-scroll-full-ambient ytd-watch-flexy:not\(\[fullscreen\]\) #yt-deck-glow::after\s*\{([^}]+)\}/);
 if (!vignetteMatch || !vignetteMatch[1].includes('radial-gradient')) {
-  failures.push('FAIL: #cinematics lacks the radial-gradient ::after vignette! Causes abrupt, razor-sharp rectangular cuts at the viewport edges.');
+  failures.push('FAIL: #yt-deck-glow lacks the radial-gradient ::after vignette! Causes abrupt, razor-sharp rectangular cuts at the viewport edges.');
 }
 // A mask on the full-viewport ambient layer costs an extra compositing pass per frame (dropped video frames)
-if (/#cinematics[^{]*\{[^}]*mask-image/.test(styleCss)) {
-  failures.push('FAIL: mask-image is used on #cinematics; it drops video frames on the full-viewport ambient layer. Use the ::after overlay.');
+if (/#(?:cinematics|yt-deck-glow)[^{]*\{[^}]*mask-image/.test(styleCss)) {
+  failures.push('FAIL: mask-image is used on the ambient glow; it drops video frames on the full-viewport layer. Use the ::after overlay.');
 }
 
 // Check 2: Live chat adaptability in style.css
@@ -54,6 +54,7 @@ const fixtureHtml = `<!DOCTYPE html>
 </head>
 <body>
   <ytd-watch-flexy>
+    <div id="yt-deck-glow"><canvas width="8" height="5"></canvas></div>
     <div id="full-bleed-container">
       <div id="player-container">
         <div id="cinematics">
@@ -78,7 +79,7 @@ const fixtureHtml = `<!DOCTYPE html>
   </ytd-watch-flexy>
   <pre id="output"></pre>
   <script>
-    const cinematics = document.querySelector('#cinematics');
+    const cinematics = document.querySelector('#yt-deck-glow');
     const cs = window.getComputedStyle(cinematics);
     const after = window.getComputedStyle(cinematics, '::after');
     const hasMask = after.backgroundImage.includes('radial-gradient') && after.position === 'absolute';
@@ -109,7 +110,7 @@ try {
   if (match) {
     const data = JSON.parse(match[1]);
     if (!data.hasMask) {
-      failures.push('FAIL: Computed #cinematics::after has no radial-gradient vignette, confirming hard rectangular boundaries in browser rendering.');
+      failures.push('FAIL: Computed #yt-deck-glow::after has no radial-gradient vignette, confirming hard rectangular boundaries in browser rendering.');
     }
   }
 } catch (e) {

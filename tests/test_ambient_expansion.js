@@ -23,14 +23,10 @@ if (!hasMastheadTransparency) {
   failures.push('FAIL: #masthead-container / ytd-masthead is not styled with transparent/translucent background, blocking ambient light from expanding behind the header.');
 }
 
-// Check 2: #cinematics viewport-wide fixed coverage (not trapped in #player-container)
-const cinematicsFixedRule = styleCss.match(/html\.yt-split-scroll[^{]*#cinematics(?:,[^{]*)?\s*\{([^}]+)\}/);
-const isCinematicsFixed = styleCss.includes('position: fixed') && styleCss.includes('width: 100vw') && styleCss.includes('height: 100vh');
-
-// Specifically check if default ambient mode keeps #cinematics trapped without position: fixed
-const defaultCinematicsTrap = styleCss.match(/html\.yt-split-scroll\.yt-split-scroll-full-ambient ytd-watch-flexy:not\(\[fullscreen\]\) #cinematics(?:,[^{]*)?\s*\{([^}]+)\}/);
-if (!defaultCinematicsTrap || !defaultCinematicsTrap[1].includes('position: fixed')) {
-  failures.push('FAIL: Default ambient mode traps #cinematics inside #player-container (lacks position: fixed), reserving ambient light strictly to the video player area.');
+// Check 2: TubeDeck's glow (#yt-deck-glow, drawn by content.js) covers the whole window in default view
+const glowRule = styleCss.match(/html\.yt-split-scroll\.yt-split-scroll-full-ambient ytd-watch-flexy:not\(\[fullscreen\]\) #yt-deck-glow\s*\{([^}]+)\}/);
+if (!glowRule || !glowRule[1].includes('position: fixed')) {
+  failures.push('FAIL: #yt-deck-glow is not a fixed full-window layer, so the glow stays trapped around the player.');
 }
 
 // Check 3: Headless Chrome Layout & Stacking Context
@@ -67,6 +63,8 @@ const fixtureHtml = `<!DOCTYPE html>
     </ytd-masthead>
   </div>
   <ytd-watch-flexy>
+    <!-- content.js puts the glow first in the flexy; YouTube's own #cinematics must stay hidden -->
+    <div id="yt-deck-glow"><canvas width="8" height="5"></canvas></div>
     <!-- Real YouTube nesting: #cinematics lives inside #primary, the left scroll column -->
     <div id="columns">
       <div id="primary">
@@ -87,7 +85,7 @@ const fixtureHtml = `<!DOCTYPE html>
   <script>
     const mastheadBox = document.querySelector('#masthead-container');
     const masthead = document.querySelector('ytd-masthead');
-    const cinematics = document.querySelector('#cinematics');
+    const cinematics = document.querySelector('#yt-deck-glow');
     
     const csMastheadBox = window.getComputedStyle(mastheadBox);
     const csMasthead = window.getComputedStyle(masthead);
@@ -100,7 +98,8 @@ const fixtureHtml = `<!DOCTYPE html>
       cinematicsTop: csCinematics.top,
       cinematicsHeight: csCinematics.height,
       cinematicsZIndex: csCinematics.zIndex,
-      cinematicsRect: cinematics.getBoundingClientRect().toJSON()
+      cinematicsRect: cinematics.getBoundingClientRect().toJSON(),
+      youtubeGlowDisplay: window.getComputedStyle(document.querySelector('#cinematics')).display
     });
   </script>
 </body>
@@ -128,12 +127,15 @@ try {
       failures.push('FAIL: Header masthead background is opaque rgb(15, 15, 15), completely blocking ambient light.');
     }
     if (data.cinematicsPosition !== 'fixed') {
-      failures.push('FAIL: #cinematics is position: ' + data.cinematicsPosition + ' (expected fixed), trapping ambient light inside the video section.');
+      failures.push('FAIL: #yt-deck-glow is position: ' + data.cinematicsPosition + ' (expected fixed), trapping ambient light inside the video section.');
+    }
+    if (data.youtubeGlowDisplay !== 'none') {
+      failures.push('FAIL: YouTube\'s own #cinematics still shows next to the TubeDeck glow.');
     }
     // An ancestor with contain/transform becomes the containing block and pins the glow below the header
     const r = data.cinematicsRect;
     if (r.top !== 0 || r.left !== 0 || r.width < 1900) {
-      failures.push('FAIL: #cinematics is clipped to an ancestor box (top ' + r.top + ', left ' + r.left + ', width ' + r.width + ') instead of covering the viewport.');
+      failures.push('FAIL: #yt-deck-glow is clipped to an ancestor box (top ' + r.top + ', left ' + r.left + ', width ' + r.width + ') instead of covering the viewport.');
     }
   }
 } catch (e) {
