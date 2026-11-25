@@ -170,9 +170,10 @@ if ($hasDynamicProtection) {
 # Copying a video frame into a 2D canvas forces a GPU->CPU readback: ~40% dropped frames on 4K60
 Write-Host "[Check 14] Verifying ambient glow samples on the GPU (WebGL) and eases colour changes..." -NoNewline
 $samplesOnGpu = ($contentContent -match 'getContext\("webgl2"') -and ($contentContent -match 'generateMipmap')
-$easesOnGpu = ($contentContent -match 'GLOW_FADE_PER_FRAME')
+$easesOnGpu = ($contentContent -match 'GLOW_STEP_K')
 $readsBackVideo = ($contentContent -match '\.drawImage\(\s*video')
-$hasOpacityVar = ($styleContent -match '#yt-deck-glow\s*\{[^}]*opacity:\s*var\(--yt-deck-ambient-opacity')
+# Opacity is baked into the opaque canvas (read from the CSS variable), not a translucent CSS layer
+$hasOpacityVar = ($contentContent -match '--yt-deck-ambient-opacity') -and -not ($styleContent -match '#yt-deck-glow\s*\{[^}]*opacity:')
 if ($samplesOnGpu -and $easesOnGpu -and -not $readsBackVideo -and $hasOpacityVar) {
     Write-Host " [GREEN]" -ForegroundColor Green
 } else {
@@ -225,12 +226,13 @@ if ($hasBackdropFilterBlur -or $hasCanvasFilterBlur) {
 # Check 18: Feathered Ambient Lighting Vignette Masks
 # Vignette must be a static ::after overlay: mask-image on the full-viewport ambient layer drops video frames
 Write-Host "[Check 18] Verifying feathered vignette overlay (no mask-image) on the ambient glow..." -NoNewline
-$hasVignette = ($styleContent -match '#yt-deck-glow::after\s*\{[^}]*radial-gradient')
+# The edge fade is baked into the glow shader: a separate ::after layer is one more full-window blend
+$hasVignette = ($contentContent -match 'smoothstep\(0\.45, 0\.75') -and -not ($styleContent -match '#yt-deck-glow::after')
 $hasCostlyMask = ($styleContent -match '#(?:cinematics|yt-deck-glow)[^{]*\{[^}]*mask-image')
 if ($hasVignette -and -not $hasCostlyMask) {
     Write-Host " [GREEN]" -ForegroundColor Green
 } else {
-    $failures += "FAIL: #yt-deck-glow needs the ::after radial-gradient vignette and must not use mask-image (drops video frames)!"
+    $failures += "FAIL: the glow edge fade must be baked into the shader (no ::after layer, no mask-image)!"
     Write-Host " [RED]" -ForegroundColor Red
 }
 

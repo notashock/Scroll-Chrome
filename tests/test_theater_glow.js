@@ -35,6 +35,9 @@ if (!/html\.yt-split-scroll ytd-watch-flexy #cinematics\s*\{[^}]*display:\s*none
 if (!contentJs.includes('getContext("webgl2"') || /\.drawImage\(\s*video/.test(contentJs)) {
   failures.push('FAIL: the glow must sample the video in WebGL, not with a 2D drawImage readback.');
 }
+// Each glow change makes the compositor redraw the whole window under the video: keep it to a few per second
+const steps = Number((contentJs.match(/GLOW_STEPS = (\d+)/) || [])[1]);
+if (!(interval >= 2000) || !(steps <= 10)) failures.push(`FAIL: glow redraws too often (sample ${interval}ms, ${steps} steps); the GPU recomposites the window each time.`);
 if (!/GLOW_W = 8;/.test(contentJs)) {
   failures.push('FAIL: theater glow samples more than an 8x5 grid; it reads as a second video instead of ambient colour.');
 }
@@ -116,11 +119,11 @@ for (const dark of [true, false]) {
     if (d.hostBg !== 'rgba(0, 0, 0, 0)') failures.push(`FAIL (${theme}): theater box background ${d.hostBg} hides the glow.`);
     if (d.cinematicsDisplay !== 'none') failures.push(`FAIL (${theme}): YouTube #cinematics still paints over the theater bars.`);
     if (d.glowPosition !== 'fixed' || !d.fillsWindow) failures.push(`FAIL (${theme}): glow does not cover the whole window.`);
-    if (!d.vignette) failures.push(`FAIL (${theme}): glow has no edge-fade vignette.`);
+    if (d.vignette) failures.push(`FAIL (${theme}): glow still has a separate ::after fade layer (baked into the shader now).`);
     // Below all page content without extra stacking layers around the video (those cost frames at 4K60)
     if (d.glowZ !== '-1') failures.push(`FAIL (${theme}): glow z-index ${d.glowZ}; it must sit at -1, under the page content.`);
-    // Same 1.25x spread as the default-view #cinematics canvas
-    if (!d.canvasTransform.startsWith('matrix(1.25, 0, 0, 1.25,')) failures.push(`FAIL (${theme}): glow scale ${d.canvasTransform} differs from the default view.`);
+    // Spread is done in the shader; a CSS transform would just add a scaled layer
+    if (d.canvasTransform !== 'none') failures.push(`FAIL (${theme}): glow canvas has a CSS transform (${d.canvasTransform}).`);
     // 600px box, 10px gaps -> 580px tall player at 4:3 = 773px wide, centred, rounded
     const p = d.player;
     if (p.top !== 10 || p.bottom !== 10 || p.h !== 580 || Math.abs(p.w - 773) > 1 || !p.centered) {
@@ -133,7 +136,8 @@ for (const dark of [true, false]) {
     // Search capsule follows each theme's glass style: white tint on dark, frosted white on light
     const wantSearch = dark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(255, 255, 255, 0.7)';
     if (d.searchBg !== wantSearch) failures.push(`FAIL (${theme}): search capsule background ${d.searchBg}, expected ${wantSearch}.`);
-    if (d.glowOpacity !== '0.85') failures.push(`FAIL (${theme}): glow opacity ${d.glowOpacity}, expected the default-view 0.85.`);
+    // Opaque layer: opacity is baked into the canvas, so the compositor never blends it
+    if (d.glowOpacity !== '1') failures.push(`FAIL (${theme}): glow layer opacity ${d.glowOpacity}; it must be opaque (opacity baked in).`);
   } catch (e) {
     failures.push(`Headless Chrome execution error (${theme}): ${e.message}`);
   }
