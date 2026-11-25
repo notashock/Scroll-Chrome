@@ -541,28 +541,45 @@
 
   // A full-window wash of the video's colours, drawn by TubeDeck in every view and both themes
   // (YouTube's own ambient layer is hidden: it is boxed in theater and freezes in the light theme).
-  // The video is reduced to an 8x5 grid of averaged colours (a texture's mipmaps), which carries the
-  // scene's colours but no recognisable picture; CSS stretches it and bilinear upscaling is the blur.
-  // Everything stays on the GPU: copying a frame into a 2D canvas forces a GPU->CPU readback that
-  // dropped ~40% of frames on 4K60 video. Measured on 4K60 with this path: no extra dropped frames.
+  // GPU budget, since the video itself can saturate weak GPUs at 4K:
+  // - The video is averaged down to an 8x5 colour grid in WebGL (texture mipmaps). A 2D-canvas
+  //   drawImage forces a GPU->CPU readback of the frame instead (~40% dropped frames at 4K60).
+  // - Every change to the glow makes the compositor redraw the whole window under the video, so it
+  //   changes rarely: one sample every 2s, eased in with 8 steps (~4 redraws/s, not one per frame).
+  // - The final pass bakes opacity, the 1.25x spread and the edge fade into one opaque canvas, so the
+  //   glow is a single opaque layer: no translucent canvas and no separate vignette layer to blend.
   const GLOW_W = 8;
   const GLOW_H = 5;
-  const GLOW_INTERVAL_MS = 1200; // one 4K texture upload per sample; ~3/s already cost frames
-  const GLOW_FADE_PER_FRAME = 0.06; // ease each new sample in over ~1s, entirely on the 8x5 textures
-  const GLOW_FADE_FRAMES = 70;
+  const GLOW_OUT_W = 64; // visible canvas: enough texels for a smooth edge fade once CSS stretches it
+  const GLOW_OUT_H = 36;
+  const GLOW_INTERVAL_MS = 2000;
+  const GLOW_STEP_MS = 100;
+  const GLOW_STEPS = 8;
+  const GLOW_STEP_K = 0.3; // 8 steps of 30% reach ~94% of the new colours in 0.8s
 
   const GLOW_VS = `#version 300 es
 in vec2 p; out vec2 uv;
 void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`;
-  // a: sampled at mip level lod (flipped for the top-down video), b: blended in by k.
-  // Video samples are graded into an ambient tint like YouTube's own: a little more saturated, then
-  // dimmed on the dark theme or lifted towards white on the light theme (raw colours wash the page out).
+  // mode 0: a sampled at mip level lod (flipped for the top-down video) and graded into an ambient
+  //         tint (saturated, then dimmed on dark / lifted towards white on light), blended with b by k.
+  // mode 1: present: spread (zoom), mix over the page colour at the ambient opacity, then the edge
+  //         fade that used to be a CSS radial-gradient (ellipse 100% 90% at 50% 35%).
   const GLOW_FS = `#version 300 es
 precision mediump float;
-in vec2 uv; uniform sampler2D a; uniform sampler2D b; uniform float k; uniform float lod; uniform float flip;
-uniform float light;
+in vec2 uv;
+uniform sampler2D a; uniform sampler2D b;
+uniform float k; uniform float lod; uniform float flip; uniform float light; uniform float mode;
+uniform float zoom; uniform float opacity; uniform vec3 bg;
 out vec4 o;
 void main() {
+  if (mode > 0.5) {
+    vec3 g = texture(a, (uv - 0.5) / zoom + 0.5).rgb;
+    vec3 c = mix(bg, g, opacity);
+    float t = length((uv - vec2(0.5, 0.65)) / vec2(1.0, 0.9));
+    float v = t < 0.75 ? smoothstep(0.45, 0.75, t) * 0.25 : 0.25 + 0.75 * clamp((t - 0.75) / 0.25, 0.0, 1.0);
+    o = vec4(mix(c, bg, v), 1.0);
+    return;
+  }
   vec4 ca = textureLod(a, flip > 0.5 ? vec2(uv.x, 1.0 - uv.y) : uv, lod);
   if (flip > 0.5) {
     float l = dot(ca.rgb, vec3(0.2126, 0.7152, 0.0722));
@@ -577,13 +594,27 @@ void main() {
 
   function stopAmbientGlow() {
     if (!ambientGlow) return;
-    const { video, handle, timer, raf, el, gl } = ambientGlow;
+    const { video, handle, timer, stepTimer, el, gl } = ambientGlow;
     clearTimeout(timer);
-    cancelAnimationFrame(raf);
+    clearTimeout(stepTimer);
     try { video.cancelVideoFrameCallback(handle); } catch (_) {}
     try { gl.getExtension("WEBGL_lose_context")?.loseContext(); } catch (_) {} // free the video texture now
     el.remove();
     ambientGlow = null;
+  }
+
+  // Page colour, spread and opacity come from CSS so the glow follows the theme and chat/playlist
+  function readGlowStyle() {
+    const root = document.documentElement;
+    const cs = getComputedStyle(root);
+    const rgb = (cs.backgroundColor.match(/[\d.]+/g) || []).slice(0, 3).map((n) => Number(n) / 255);
+    const dark = root.hasAttribute("dark");
+    return {
+      light: dark ? 0 : 1,
+      bg: rgb.length === 3 ? rgb : dark ? [15 / 255, 15 / 255, 15 / 255] : [1, 1, 1],
+      zoom: parseFloat(cs.getPropertyValue("--yt-deck-glow-zoom")) || 1.25,
+      opacity: parseFloat(cs.getPropertyValue("--yt-deck-ambient-opacity")) || 0.85,
+    };
   }
 
   function createGlowRenderer(canvas) {
@@ -608,7 +639,8 @@ void main() {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     const u = (name) => gl.getUniformLocation(prog, name);
-    const uK = u("k"), uLod = u("lod"), uFlip = u("flip"), uLight = u("light");
+    const uK = u("k"), uLod = u("lod"), uFlip = u("flip"), uLight = u("light"), uMode = u("mode");
+    const uZoom = u("zoom"), uOpacity = u("opacity"), uBg = u("bg");
     gl.uniform1i(u("a"), 0);
     gl.uniform1i(u("b"), 1);
 
@@ -639,6 +671,7 @@ void main() {
     const pass = (fb, a, b, k, lod, flip) => {
       gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
       gl.viewport(0, 0, GLOW_W, GLOW_H);
+      gl.uniform1f(uMode, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, a);
       gl.activeTexture(gl.TEXTURE1);
@@ -648,18 +681,32 @@ void main() {
       gl.uniform1f(uFlip, flip);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };
-    const present = () => pass(null, shown[cur].t, shown[cur].t, 0, 0, 0);
+    // Draw the eased colours to the visible (opaque) canvas with spread, opacity and edge fade
+    const present = () => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, GLOW_OUT_W, GLOW_OUT_H);
+      gl.uniform1f(uMode, 1);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, shown[cur].t);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, shown[cur].t);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    };
 
     return {
       gl,
       // Upload the current frame and average it down to 8x5 on the GPU (never read back)
       sample(video) {
+        const style = readGlowStyle();
+        gl.uniform1f(uLight, style.light);
+        gl.uniform3f(uBg, style.bg[0], style.bg[1], style.bg[2]);
+        gl.uniform1f(uZoom, style.zoom);
+        gl.uniform1f(uOpacity, style.opacity);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, videoTex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
         gl.generateMipmap(gl.TEXTURE_2D);
         const lod = Math.log2(Math.max(video.videoWidth / GLOW_W, video.videoHeight / GLOW_H, 1));
-        gl.uniform1f(uLight, document.documentElement.hasAttribute("dark") ? 0 : 1);
         // b is unused at k=0 but must not be latest.t: sampling the texture being rendered into is a
         // feedback loop that WebGL rejects (INVALID_OPERATION, black glow)
         pass(latest.fb, videoTex, videoTex, 0, lod, 1);
@@ -671,7 +718,7 @@ void main() {
       },
       // One easing step towards the newest sample, then draw it to the visible canvas
       step() {
-        pass(shown[1 - cur].fb, shown[cur].t, latest.t, GLOW_FADE_PER_FRAME, 0, 0);
+        pass(shown[1 - cur].fb, shown[cur].t, latest.t, GLOW_STEP_K, 0, 0);
         cur = 1 - cur;
         present();
       },
@@ -690,32 +737,31 @@ void main() {
     if (ambientGlow && ambientGlow.video === video && ambientGlow.el.parentNode === flexy) return;
 
     stopAmbientGlow();
-    // Wrapper carries the edge-fade ::after (a canvas can't have pseudo-elements). It lives in the
-    // flexy, not the theater box, whose size containment would trap a position: fixed child.
+    // Lives in the flexy, not the theater box, whose size containment would trap a position: fixed child
     const el = document.createElement("div");
     el.id = "yt-deck-glow";
     const canvas = document.createElement("canvas");
-    canvas.width = GLOW_W;
-    canvas.height = GLOW_H;
+    canvas.width = GLOW_OUT_W;
+    canvas.height = GLOW_OUT_H;
     const renderer = createGlowRenderer(canvas);
     if (!renderer) return; // no WebGL2: no glow rather than the stuttering 2D readback path
     el.append(canvas);
     flexy.prepend(el);
 
-    const glow = { el, video, gl: renderer.gl, handle: 0, timer: 0, raf: 0, frames: 0 };
+    const glow = { el, video, gl: renderer.gl, handle: 0, timer: 0, stepTimer: 0, steps: 0 };
     const ease = () => {
-      glow.raf = 0;
+      glow.stepTimer = 0;
       if (ambientGlow !== glow) return;
       renderer.step();
-      if (--glow.frames > 0) glow.raf = requestAnimationFrame(ease);
+      if (--glow.steps > 0) glow.stepTimer = setTimeout(ease, GLOW_STEP_MS);
     };
     // Wait for the next presented frame (a paused video presents none, so nothing runs), then sample
     const sample = () => {
       if (ambientGlow !== glow) return;
       try {
         renderer.sample(video);
-        glow.frames = GLOW_FADE_FRAMES;
-        if (!glow.raf) glow.raf = requestAnimationFrame(ease);
+        glow.steps = GLOW_STEPS;
+        if (!glow.stepTimer) glow.stepTimer = setTimeout(ease, GLOW_STEP_MS);
       } catch (_) {} // e.g. a non-CORS video source
       glow.timer = setTimeout(queue, GLOW_INTERVAL_MS);
     };

@@ -10,10 +10,10 @@ const failures = [];
 
 console.log('Testing Ambient Lighting Feathering & UI Adaptability...\n');
 
-// Check 1: Feathered vignette on the glow (static ::after overlay, never mask-image)
-const vignetteMatch = styleCss.match(/html\.yt-split-scroll\.yt-split-scroll-full-ambient ytd-watch-flexy:not\(\[fullscreen\]\) #yt-deck-glow::after\s*\{([^}]+)\}/);
-if (!vignetteMatch || !vignetteMatch[1].includes('radial-gradient')) {
-  failures.push('FAIL: #yt-deck-glow lacks the radial-gradient ::after vignette! Causes abrupt, razor-sharp rectangular cuts at the viewport edges.');
+// Check 1: Feathered edge fade, baked into the glow shader (a separate ::after layer is one more
+// full-window blend under the video; mask-image is a full-screen pass)
+if (!/smoothstep\(0\.45, 0\.75/.test(contentJs) || /#yt-deck-glow::after/.test(styleCss)) {
+  failures.push('FAIL: the glow edge fade is not baked into the shader! Causes abrupt rectangular cuts at the viewport edges or an extra blend layer.');
 }
 // A mask on the full-viewport ambient layer costs an extra compositing pass per frame (dropped video frames)
 if (/#(?:cinematics|yt-deck-glow)[^{]*\{[^}]*mask-image/.test(styleCss)) {
@@ -82,7 +82,8 @@ const fixtureHtml = `<!DOCTYPE html>
     const cinematics = document.querySelector('#yt-deck-glow');
     const cs = window.getComputedStyle(cinematics);
     const after = window.getComputedStyle(cinematics, '::after');
-    const hasMask = after.backgroundImage.includes('radial-gradient') && after.position === 'absolute';
+    // No separate fade layer: the canvas is the only (opaque) layer of the glow
+    const hasMask = after.content === 'none' || after.content === 'normal';
 
     document.getElementById('output').textContent = JSON.stringify({
       hasMask,
@@ -110,7 +111,7 @@ try {
   if (match) {
     const data = JSON.parse(match[1]);
     if (!data.hasMask) {
-      failures.push('FAIL: Computed #yt-deck-glow::after has no radial-gradient vignette, confirming hard rectangular boundaries in browser rendering.');
+      failures.push('FAIL: Computed #yt-deck-glow::after still renders a separate vignette layer, confirming hard rectangular boundaries in browser rendering.');
     }
   }
 } catch (e) {
